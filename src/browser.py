@@ -1,8 +1,5 @@
-"""Funções compartilhadas de navegação.
-
-A implementação concreta dependerá da biblioteca de automação escolhida
-(Selenium, Playwright ou equivalente).
-"""
+import tkinter as tk
+from tkinter import messagebox
 import shutil
 import os
 from selenium import webdriver
@@ -14,7 +11,7 @@ import time
 from dotenv import load_dotenv
 from pathlib import Path
 from config import DOWNLOADS_DIR,URL,USUARIO,SENHA,HEADLESS
-
+from selenium.webdriver.chrome.service import Service
 
 
 def realizar_login():
@@ -37,12 +34,71 @@ def realizar_login():
             "safebrowsing.enabled": True
         }
     )
+    #
     
+    user_profile = os.environ["USERPROFILE"]
+
+    chromedriver_path = os.path.join(
+        user_profile,
+        "Chrome",
+        "chromedriver.exe"
+    )
+
+    chrome_path = os.path.join(
+        user_profile,
+        "Chrome",
+        "GoogleChrome",
+        "App",
+        "Chrome-bin",
+        "chrome.exe"
+    )
+
+
+    # Verifica se o ChromeDriver existe
+    if not os.path.isfile(chromedriver_path):
+        root = tk.Tk()
+        root.withdraw()
+
+        messagebox.showerror(
+            "Arquivo não encontrado",
+            f"O ChromeDriver não foi encontrado.\n\n"
+            f"Caminho esperado:\n{chromedriver_path}"
+        )
+
+        root.destroy()
+        raise SystemExit
+
+
+    # Verifica se o Chrome existe
+    if not os.path.isfile(chrome_path):
+        root = tk.Tk()
+        root.withdraw()
+
+        messagebox.showerror(
+            "Arquivo não encontrado",
+            f"O Google Chrome não foi encontrado.\n\n"
+            f"Caminho esperado:\n{chrome_path}"
+        )
+
+        root.destroy()
+        raise SystemExit
+
+
+    # Se encontrou os dois, inicia o Selenium
+    service = Service(
+        executable_path=chromedriver_path
+    )
+
+    
+    options.binary_location = chrome_path
+
+    
+
     if HEADLESS:
         options.add_argument("--headless=new")
    
     driver = webdriver.Chrome(
-        options=options
+        options=options,service=service
     )
     
     

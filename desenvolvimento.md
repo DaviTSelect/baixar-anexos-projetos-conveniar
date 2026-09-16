@@ -86,7 +86,7 @@ baixar-anexos-projetos-conveniar/
 │   └── browser.py
 │
 ├── tests/
-│   └── test_loader.py
+│   └── test_regras.py
 │
 ├── docs/
 │   └── desenvolvimento.md
@@ -111,80 +111,20 @@ Não criar arquivos apenas para seguir essa estrutura. Um novo módulo deve exis
 
 Responsável por coordenar a execução.
 
-Exemplo conceitual:
-
-```python
-def main():
-    projeto = obter_projeto()
-
-    pasta = criar_pasta_projeto(projeto)
-
-    fazer_login()
-
-    abrir_busca_contratos()
-
-    processar_status(
-        projeto=projeto,
-        status="ATIVO",
-        pasta_destino=pasta,
-    )
-
-    processar_status(
-        projeto=projeto,
-        status="ENCERRADO",
-        pasta_destino=pasta,
-    )
-```
-
 O `main.py` não deve concentrar todas as regras da automação.
 
 ---
 
-## `login.py`
+## `browser.py`
 
-Responsável pelo processo de autenticação.
-
-Possíveis responsabilidades:
-
-```python
-fazer_login()
-validar_login()
-```
-
-Credenciais não deverão estar diretamente no código.
-
-Utilizar variáveis de ambiente.
-
-Nunca registrar senha nos logs.
-
----
-
-## `contratos.py`
-
-Responsável pela consulta e navegação relacionada aos contratos.
+Responsável pela autenticação, busca de contratos, processamento de contratos e download de anexos. Contém também a função `aguardar_loader_desaparecer`.
 
 Possíveis funções:
 
 ```python
-abrir_busca_contratos()
-
-limpar_filtros_data()
-
-selecionar_tipo_contrato()
-
-selecionar_projeto()
-
-selecionar_status()
-
-buscar_contratos()
-
-obter_contratos_da_pagina()
-
-existe_proxima_pagina()
-
-ir_para_proxima_pagina()
-
-abrir_contrato()
+realizar_login()
+buscar_contratos(driver, numero_projeto)
+processar_contrato(driver, item, projeto)
 ```
 
 A paginação deve ser considerada obrigatória.
@@ -193,53 +133,15 @@ Nunca assumir que todos os contratos estarão na primeira página.
 
 ---
 
-## `anexos.py`
+## `interface.py`
 
-Responsável pela identificação e download dos documentos.
-
-Possíveis funções:
-
-```python
-abrir_aba_arquivos()
-
-obter_anexos()
-
-baixar_anexo()
-
-criar_pasta_projeto()
-
-resolver_nome_arquivo()
-```
-
-Todos os anexos deverão ser armazenados na pasta correspondente ao projeto.
-
-Exemplo:
-
-```text
-downloads/
-└── 12345/
-    ├── documento.pdf
-    ├── termo.pdf
-    └── comprovante.pdf
-```
+Responsável pela interface gráfica (CustomTkinter) para entrada do número do projeto e execução da automação.
 
 ---
 
-## `loader.py`
+## `config.py`
 
-Responsável exclusivamente pelo controle dos indicadores de carregamento da interface.
-
-Deverá existir uma função central:
-
-```python
-def aguardar_loader_desaparecer(page):
-    """
-    Aguarda até que o loader da aplicação deixe de bloquear
-    a interação com a página.
-    """
-```
-
-Essa função deverá ser reutilizada em toda a automação.
+Centraliza configurações e leitura das variáveis de ambiente.
 
 ---
 

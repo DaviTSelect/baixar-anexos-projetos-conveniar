@@ -16,13 +16,13 @@ Não adicionar complexidade sem necessidade real.
 
 Orquestra o fluxo principal.
 
+### `interface.py`
+
+Interface gráfica (CustomTkinter) para entrada do número do projeto e execução da automação.
+
 ### `browser.py`
 
-Concentra ações comuns do navegador, principalmente espera de loader e navegação compartilhada.
-
-### `contratos.py`
-
-Contém regras e operações relacionadas à busca, leitura e processamento dos contratos.
+Concentra ações comuns do navegador: login, busca de contratos, processamento de contratos e download de anexos. Também contém a função `aguardar_loader_desaparecer`.
 
 ### `config.py`
 

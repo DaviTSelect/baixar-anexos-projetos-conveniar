@@ -2,8 +2,9 @@
 
 Automação interna do setor de projetos para baixar os anexos dos contratos de bolsistas vinculados a um projeto.
 
-**Prioridade:** 2  
-**Status:** Em desenvolvimento
+| Prioridade | 2 |
+| --- | --- |
+| Status | Em desenvolvimento |
 
 ## Objetivo
 
@@ -73,21 +74,23 @@ baixar-anexos-projetos-conveniar/
 ├── src/
 │   ├── main.py
 │   ├── browser.py
-│   ├── contratos.py
+│   ├── interface.py
 │   └── config.py
 ├── tests/
 │   └── test_regras.py
 ├── docs/
 │   └── desenvolvimento.md
 ├── downloads/
-│   └── .gitkeep
+│   └── 377/
 ├── .github/
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── .env.example
+├── .env
 ├── .gitignore
 ├── pytest.ini
 ├── requirements.txt
-└── README.md
+├── README.md
+└── desenvolvimento.md
 ```
 
 ## Desenvolvimento
