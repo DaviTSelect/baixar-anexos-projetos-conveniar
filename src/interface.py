@@ -1,8 +1,10 @@
+import customtkinter as ctk
 from customtkinter import (
     CTk,
     CTkLabel,
     CTkEntry,
-    CTkButton
+    CTkButton,
+    CTkFrame,
 )
 from pathlib import Path
 from browser import realizar_login
@@ -23,8 +25,11 @@ class Interface:
 
     def criar_componentes(self):
         #coloque os componentes aqui
-        self.label_projeto = CTkLabel(self.app,text="Número do projeto")
-        self.label_projeto.pack()
+        self.fundo_interface = CTkFrame(self.app, width=250)
+        self.fundo_interface.grid(row=0, column=1, sticky="ns")
+        self.fundo_interface.pack()
+        #self.label_projeto = CTkLabel(self.app,text="Número do projeto")
+        #self.label_projeto.pack()
 
     # ignora por enquanto, o botão chamará futuramente   
     def botao_iniciar_processo(numero_projeto):
