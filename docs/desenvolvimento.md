@@ -1,188 +1,143 @@
-# Desenvolvimento
+﻿# Desenvolvimento
 
-Este projeto deve permanecer simples, seguro e fácil de manter.
+Este guia descreve o código existente e separa as regras pretendidas das funcionalidades ainda pendentes. Consulte o [README](../README.md) para a configuração e a estrutura do projeto.
 
-## Princípio
+Para apoio ao estagiário, consulte o [guia básico de Git e GitHub](github-basico.md), o [atalho de commit e envio da branch atual](../ferramentas/github/README.md) e os [exemplos de componentes de interface](componentes-interface.md). Os exemplos são material de estudo; o painel definitivo continua sob responsabilidade do integrante designado.
 
-```text
-Entender → Implementar → Fazer funcionar → Validar → Corrigir → Documentar
+## Responsabilidades dos módulos
+
+| Arquivo | Responsabilidade atual |
+| --- | --- |
+| `src/main.py` | Instancia `Interface` e inicia o laço da interface gráfica. |
+| `src/interface.py` | Cria a janela CustomTkinter e o rótulo do projeto. Contém uma rotina de login, busca e processamento ainda sem conexão com um botão. |
+| `src/browser.py` | Contém as rotinas de login, consulta e download, além da função de espera do loader ainda não implementada. |
+| `src/config.py` | Lê as variáveis de ambiente e define os caminhos da raiz e dos downloads. |
+| `tests/test_regras.py` | Define testes de situação e normalização, mas importa um módulo ausente. |
+
+## Integração do painel e autenticação
+
+O painel planejado terá entrada para o número do projeto. `interface.py` será integrado separadamente pelo responsável pela interface.
+
+O painel deve chamar `realizar_login()` sem argumentos. A rotina usa `USUARIO` e `SENHA` de `src/config.py`, que carrega o `.env` da raiz. Não há persistência de credenciais em JSON, campos de login ou opção de logout local no painel. O login continua sujeito à limitação do loader descrita abaixo.
+
+## Consulta e situação dos contratos
+
+`buscar_contratos(driver, numero_projeto)` contém esta sequência:
+
+1. Selecionar `Contrato de Bolsa`.
+2. Informar o número do projeto e selecionar uma opção correspondente.
+3. Limpar o campo de data inicial.
+4. Acionar a consulta e obter as linhas da tabela da página atual.
+5. Ignorar linhas com menos de 11 colunas, de outro projeto ou sem link de contrato.
+6. Retornar somente contratos cuja situação, após remoção de espaços nas extremidades e conversão para minúsculas, seja `ativo` ou `encerrado`.
+
+A rotina não altera o filtro de situação. O requisito é consultar sem esse filtro e selecionar os contratos válidos nas linhas retornadas; não são previstas duas consultas separadas por situação.
+
+Cada resultado contém `contrato`, `projeto`, `status` e `link`. O link é um elemento do Selenium, não uma URL armazenada como texto.
+
+## Loader e paginação
+
+`aguardar_loader_desaparecer(page, timeout=30)` ainda lança `NotImplementedError`. Embora as rotinas a chamem, não há espera efetiva pelo loader, e essas chamadas interrompem a execução.
+
+O requisito é aguardar uma condição real da página com timeout após operações que provoquem carregamento. O código também contém esperas fixas com `time.sleep()`.
+
+A paginação ainda não foi implementada. As chamadas para rolar a página não constituem navegação entre páginas de resultados.
+
+Quando implementada, a paginação deverá:
+
+- Percorrer todas as páginas, inclusive as que não tenham contratos válidos.
+- Evitar processar uma página duas vezes ou ignorar a última.
+- Preservar a navegação ao retornar dos detalhes de um contrato.
+- Evitar laços infinitos.
+
+## Processamento e downloads
+
+A sequência presente em `processar_contrato(driver, item, projeto)`, atualmente bloqueada pelas chamadas ao loader, é:
+
+1. Criar `downloads/<projeto>/<contrato>/`, substituindo `/` por `_` no contrato.
+2. Guardar a janela atual, clicar no link e selecionar a última janela do navegador.
+3. Abrir a aba `Arquivos` e localizar a tabela de anexos.
+4. Coletar o primeiro botão `Baixar arquivo` de cada linha que tenha esse botão.
+5. Acionar cada download e procurar um novo arquivo em `downloads/`, ignorando a extensão `.crdownload`.
+6. Mover o arquivo para a pasta do contrato, se o nome ainda não existir no destino.
+7. Fechar a janela do contrato e retornar à anterior.
+
+A espera pelo arquivo usa até 120 verificações, com intervalos de um segundo. Se nenhum arquivo for identificado, a rotina lança `TimeoutError`.
+
+Se o nome já existir no destino, o arquivo existente é mantido e o novo download é excluído. Não há comparação de conteúdo nem renomeação com sufixos. Arquivos de mesmo nome podem ter conteúdos diferentes; essa limitação deve ser considerada ao avaliar os resultados.
+
+Se a tabela existir, mas não tiver botões de download, o laço de downloads fica vazio. Se a tabela não aparecer, a espera pode falhar por timeout. Portanto, o requisito de continuar após qualquer contrato sem anexos ainda não está plenamente atendido.
+
+## Limitações conhecidas
+
+Além do loader e da paginação:
+
+- A interface não possui entrada de projeto nem botão de execução conectado.
+- A busca limpa apenas a data inicial, sem limpar todos os filtros de data.
+- `requirements.txt` não declara `selenium` nem `customtkinter`, apesar dos imports no código.
+- O navegador depende dos caminhos fixos para Windows descritos no README.
+- Não há tratamento que assegure continuar nos demais contratos após uma exceção, nem fechamento garantido das janelas em caso de falha.
+
+Esses pontos são registros de documentação, não correções implementadas.
+
+## Testes existentes
+
+`pytest.ini` configura a descoberta de `test_*.py` em `tests/` e a saída reduzida com `-q`.
+
+`tests/test_envio_github.py` valida o script de envio usando repositórios temporários e um remoto local, sem acessar o GitHub. Requer Git e PowerShell do Windows. Cobre commit e push da branch atual, reenvio sem novo commit, cancelamento, mensagem vazia, bloqueio de `.env` rastreado, ausência de branch ativa e preservação do commit após push rejeitado. Execute separadamente da suíte de regras:
+
+```powershell
+python -B -m pytest tests/test_envio_github.py -p no:cacheprovider
 ```
 
-Não adicionar complexidade sem necessidade real.
+`tests/test_regras.py` define estes cenários:
 
-## Divisão dos arquivos
+- Aceitar `ATIVO` e `ENCERRADO`.
+- Rejeitar `CANCELADO` e `SUSPENSO`.
+- Normalizar espaços nas extremidades e diferenças entre maiúsculas e minúsculas.
 
-### `main.py`
+Porém, o arquivo importa `normalizar_situacao` e `situacao_valida` de `src.contratos`, que não existe no código-fonte atual. Essa dependência impede a coleta dos testes em um ambiente limpo. Os testes não validam diretamente a filtragem presente em `browser.py`.
 
-Orquestra o fluxo principal.
+Para futuras alterações de código autorizadas, priorizar testes de regras críticas: seleção dos contratos, colisões de nomes, paginação e timeouts. Não buscar cobertura artificial nem apresentar cenários planejados como testes já existentes.
 
-### `interface.py`
+## Orientações de manutenção
 
-Interface gráfica (CustomTkinter) para entrada do número do projeto e execução da automação.
+Seguir o fluxo: entender o problema, implementar, validar, tratar erros relevantes, documentar e refatorar quando necessário.
 
-### `browser.py`
+Antes de alterar uma função, ler sua implementação, verificar onde é usada e analisar os testes relacionados. Preferir responsabilidades claras e evitar abstrações sem necessidade real. Docstrings devem explicar entradas, saídas e comportamento; comentários devem esclarecer decisões.
 
-Concentra ações comuns do navegador: login, busca de contratos, processamento de contratos e download de anexos. Também contém a função `aguardar_loader_desaparecer`.
+Essas orientações gerais não ampliam a autorização de uma tarefa. Em revisões restritas a Markdown, registrar problemas sem modificar código ou configuração.
 
-### `config.py`
+### Logs e investigação de erros
 
-Centraliza configurações e leitura das variáveis de ambiente.
+O código atual usa `print()`; não há um sistema de logs estruturados com níveis `[INFO]`, `[WARNING]` e `[ERROR]`.
 
-## Regra de situação
-
-A consulta é realizada sem filtro de situação.
-
-Somente contratos `ATIVO` e `ENCERRADO` são processados.
-
-Outras situações são ignoradas.
-
-Essa regra deve permanecer isolada para ser simples de testar.
-
-## Loader
-
-Toda operação que provocar carregamento deve aguardar o loader desaparecer antes da próxima interação.
-
-Evitar `time.sleep()` quando for possível aguardar uma condição real.
-
-Toda espera deve possuir timeout.
-
-## Paginação
-
-Percorrer todas as páginas até que não exista próxima página.
-
-Uma página sem contratos `ATIVO` ou `ENCERRADO` não significa fim da paginação.
-
-## Downloads
-
-Todos os anexos são armazenados em:
-
-```text
-downloads/<numero_projeto>/
-```
-
-Não sobrescrever silenciosamente arquivos existentes.
-
-## Logs
-
-Registrar somente informações úteis para investigação, como:
-
-```text
-[INFO] Projeto 12345
-[INFO] Página 2
-[INFO] Contrato 1001 - ATIVO
-[INFO] 3 anexos encontrados
-[INFO] Download concluído: documento.pdf
-[WARNING] Contrato sem anexos
-[ERROR] Falha ao abrir contrato 1005
-```
-
-Nunca registrar senha ou credenciais.
-
-## Tratamento de erros
-
-Priorizar erros que podem interromper ou comprometer a automação:
-
-- login inválido;
-- loader/timeout;
-- falha na paginação;
-- falha ao abrir contrato;
-- falha no download;
-- diretório não disponível;
-- mudança relevante na interface.
-
-Evitar `except: pass`.
-
-## Testes
-
-Não buscamos 100% de cobertura.
-
-Testar somente regras pequenas e críticas que tragam valor.
-
-Inicialmente:
-
-- `ATIVO` deve ser processado;
-- `ENCERRADO` deve ser processado;
-- outras situações devem ser ignoradas;
-- normalização de espaços/maiúsculas deve funcionar.
-
-Novos testes devem ser adicionados quando um bug importante for encontrado ou uma nova regra de negócio justificar proteção.
-
-## Estagiário
-
-Foco inicial:
-
-1. Entender o fluxo.
-2. Executar a automação em cenários controlados.
-3. Documentar funções relevantes.
-4. Verificar comportamentos inesperados.
-5. Registrar como reproduzir erros.
-6. Criar testes somente para regras importantes.
-
-A correção de erros pode ser assumida progressivamente.
-
-## Ao encontrar um erro
-
-Registrar:
+Registrar informações que ajudem a localizar a falha, sem senhas ou credenciais:
 
 ```text
 Projeto:
 Página:
 Contrato:
 Etapa:
-Esperado:
-Obtido:
+Comportamento esperado:
+Comportamento obtido:
 Como reproduzir:
-Mensagem/log:
+Mensagem apresentada:
 ```
 
-Se o erro representar uma regra que pode ser isolada, criar um teste antes ou junto da correção.
+Priorizar falhas de login, loader, navegação, download e acesso ao diretório. Evitar esconder exceções. Quando uma correção de código for autorizada, criar um teste de regressão se a falha puder ser representada por um teste útil.
 
-## Git
+### Git e revisão
 
-Fluxo simples:
+Cada alteração deve ter um objetivo claro. Usar branches conforme necessário, como `feature/<tema>`, `fix/<problema>` ou `docs/<tema>`.
 
-```text
-main
-  ↓
-feature/<tema>
-  ↓
-Pull Request
-  ↓
-revisão
-  ↓
-main
-```
+Os commits devem descrever a mudança com precisão, usando prefixos como `feat:`, `fix:`, `test:`, `docs:`, `refactor:` ou `chore:`.
 
-Branches sugeridas conforme necessário:
+Antes de abrir um pull request:
 
-```text
-feature/login
-feature/busca-contratos
-feature/download-anexos
-fix/<problema>
-docs/<tema>
-```
+- Revisar o diff e confirmar que o escopo autorizado foi respeitado.
+- Executar as validações pertinentes e registrar limitações ou bloqueios.
+- Verificar se nenhuma credencial ou arquivo temporário foi incluído.
+- Atualizar a documentação afetada.
 
-Não criar todas antecipadamente.
-
-## Commits
-
-```text
-feat: nova funcionalidade
-fix: correção
-test: teste relevante
-docs: documentação
-refactor: melhoria interna sem alterar comportamento
-chore: configuração/manutenção
-```
-
-## Pull Requests sugeridos
-
-O desenvolvimento pode ser dividido em poucos PRs:
-
-1. Estrutura inicial e login.
-2. Busca, filtros, leitura dos resultados e paginação.
-3. Processamento dos contratos e downloads.
-4. Ajustes finais, logs, erros e documentação.
-
-A divisão pode mudar se uma funcionalidade ficar grande demais.
+Usar o [modelo de pull request](../.github/PULL_REQUEST_TEMPLATE.md) para explicar o que mudou, por quê, como foi validado e quais limitações permanecem. Em alterações exclusivamente documentais, a validação pode consistir na revisão dos links e na comparação das afirmações com o código, sem executar a automação.

@@ -15,7 +15,7 @@ from selenium.webdriver.chrome.service import Service
 
 
 def realizar_login():
-    
+    """Usa as credenciais fixas configuradas no .env via config.py."""
 
     DOWNLOADS_DIR.mkdir(
         parents=True,
