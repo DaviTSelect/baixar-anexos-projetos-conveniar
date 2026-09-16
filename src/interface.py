@@ -26,7 +26,7 @@ class Interface:
         self.label_projeto = CTkLabel(self.app,text="Número do projeto")
         self.label_projeto.pack()
 
-        
+    # ignora por enquanto, o botão chamará futuramente   
     def botao_iniciar_processo(numero_projeto):
         driver = realizar_login()
         resultados = buscar_contratos(driver,numero_projeto)

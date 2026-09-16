@@ -82,14 +82,10 @@ baixar-anexos-projetos-conveniar/
 ├── src/
 │   ├── main.py
 │   ├── config.py
-│   ├── login.py
-│   ├── contratos.py
-│   ├── anexos.py
-│   └── loader.py
+│   ├── interface.py
+│   └── browser.py
 │
 ├── tests/
-│   ├── test_contratos.py
-│   ├── test_anexos.py
 │   └── test_loader.py
 │
 ├── docs/
