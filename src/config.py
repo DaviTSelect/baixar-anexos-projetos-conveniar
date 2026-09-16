@@ -13,3 +13,4 @@ load_dotenv(BASE_DIR / ".env")
 USUARIO = os.getenv("USUARIO")
 SENHA = os.getenv("SENHA")
 HEADLESS = os.getenv("HEADLESS", "true").strip().lower() == "true"
+URL = os.getenv("URL")
