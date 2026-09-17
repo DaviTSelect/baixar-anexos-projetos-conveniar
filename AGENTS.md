@@ -87,11 +87,10 @@ As regras abaixo descrevem o comportamento pretendido. Consulte o guia para dist
 
 ## Limitações atuais a conferir antes de trabalhar
 
-- A interface contém apenas o rótulo do projeto e não está conectada à automação.
+- A interface está conectada à automação e mostra o contrato em processamento; as chamadas do Selenium ainda bloqueiam a interação com a janela.
 - A espera do loader lança `NotImplementedError`.
 - A consulta não implementa paginação e limpa apenas a data inicial.
 - `tests/test_regras.py` importa `src.contratos`, que ainda não existe.
-- `requirements.txt` não declara Selenium e CustomTkinter, embora sejam importados pelo código.
 - O navegador depende dos caminhos de Chrome e ChromeDriver para Windows descritos no README.
 
 Esta lista não autoriza correções fora do pedido. Atualize-a quando uma dessas limitações for resolvida.

@@ -10,5 +10,8 @@ htmlcov/
 .idea/
 *.log
 downloads/
+.kilo/
 !downloads/.gitkeep
 Instalar o Google Chrome.zip
+build/
+dist/

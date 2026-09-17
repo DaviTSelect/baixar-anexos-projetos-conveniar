@@ -9,14 +9,16 @@ Para apoio ao estagiário, consulte o [guia básico de Git e GitHub](github-basi
 | Arquivo | Responsabilidade atual |
 | --- | --- |
 | `src/main.py` | Instancia `Interface` e inicia o laço da interface gráfica. |
-| `src/interface.py` | Cria a janela CustomTkinter e o rótulo do projeto. Contém uma rotina de login, busca e processamento ainda sem conexão com um botão. |
+| `src/interface.py` | Cria a janela CustomTkinter, recebe o projeto e a pasta, inicia a automação e mostra o contrato em processamento. |
 | `src/browser.py` | Contém as rotinas de login, consulta e download, além da função de espera do loader ainda não implementada. |
 | `src/config.py` | Lê as variáveis de ambiente e define os caminhos da raiz e dos downloads. |
 | `tests/test_regras.py` | Define testes de situação e normalização, mas importa um módulo ausente. |
 
 ## Integração do painel e autenticação
 
-O painel planejado terá entrada para o número do projeto. `interface.py` será integrado separadamente pelo responsável pela interface.
+O painel possui entrada para o número do projeto, seleção de pasta e botão de execução. O rótulo de status mostra login, consulta e `Baixando anexos do contrato <número>...` antes de processar cada contrato. Ao terminar, indica conclusão, ausência de contratos ou a etapa que falhou.
+
+O texto é redesenhado com `update_idletasks()` antes das chamadas do Selenium. A execução continua síncrona: o rótulo identifica o contrato em processamento, mas não mede o progresso dos arquivos, e a janela ainda pode ficar sem responder durante esperas longas. O botão fica desabilitado durante o processamento; o navegador retornado pelo login é encerrado ao final, inclusive em falhas.
 
 O painel deve chamar `realizar_login()` sem argumentos. A rotina usa `USUARIO` e `SENHA` de `src/config.py`, que carrega o `.env` da raiz. Não há persistência de credenciais em JSON, campos de login ou opção de logout local no painel. O login continua sujeito à limitação do loader descrita abaixo.
 
@@ -27,11 +29,15 @@ O painel deve chamar `realizar_login()` sem argumentos. A rotina usa `USUARIO` e
 1. Selecionar `Contrato de Bolsa`.
 2. Informar o número do projeto e selecionar uma opção correspondente.
 3. Limpar o campo de data inicial.
-4. Acionar a consulta e obter as linhas da tabela da página atual.
+4. Acionar a consulta, rolar até o fim e reler as linhas da página atual até estabilizarem por dois segundos (timeout de 30 segundos), antes de começar pela primeira linha.
 5. Ignorar linhas com menos de 11 colunas, de outro projeto ou sem link de contrato.
 6. Retornar somente contratos cuja situação, após remoção de espaços nas extremidades e conversão para minúsculas, seja `ativo` ou `encerrado`.
 
 A rotina não altera o filtro de situação. O requisito é consultar sem esse filtro e selecionar os contratos válidos nas linhas retornadas; não são previstas duas consultas separadas por situação.
+
+`carregar_linhas_contratos` verifica `document.readyState`, a invisibilidade do loader existente `imgLoad` e a chegada ao fim da página. Relocaliza as linhas a cada verificação; mudanças na altura, nos elementos ou no texto reiniciam os dois segundos de estabilidade. Se a página crescer, volta a rolar até o novo final. O timeout interrompe a consulta sem processar uma lista parcial. Esses sinais não comprovam ausência de futuras requisições assíncronas; o comportamento precisa ser validado no Conveniar, inclusive o seletor do loader. A espera ocorre antes do laço de contratos da página atual.
+
+Os testes isolados dessa espera usam navegador e relógio simulados, sem acessar credenciais: `python -B -m unittest discover -s tests -p test_carregamento.py`. Cobrem linhas tardias, substituição de elementos, tabela vazia, loader ativo, documento incompleto, posição de rolagem e crescimento contínuo com timeout.
 
 Cada resultado contém `contrato`, `projeto`, `status` e `link`. O link é um elemento do Selenium, não uma URL armazenada como texto.
 
@@ -72,9 +78,8 @@ Se a tabela existir, mas não tiver botões de download, o laço de downloads fi
 
 Além do loader e da paginação:
 
-- A interface não possui entrada de projeto nem botão de execução conectado.
+- A automação executa na mesma thread da interface e bloqueia a interação durante as chamadas do Selenium.
 - A busca limpa apenas a data inicial, sem limpar todos os filtros de data.
-- `requirements.txt` não declara `selenium` nem `customtkinter`, apesar dos imports no código.
 - O navegador depende dos caminhos fixos para Windows descritos no README.
 - Não há tratamento que assegure continuar nos demais contratos após uma exceção, nem fechamento garantido das janelas em caso de falha.
 
@@ -84,7 +89,7 @@ Esses pontos são registros de documentação, não correções implementadas.
 
 `pytest.ini` configura a descoberta de `test_*.py` em `tests/` e a saída reduzida com `-q`.
 
-`tests/test_envio_github.py` valida o script de envio usando repositórios temporários e um remoto local, sem acessar o GitHub. Requer Git e PowerShell do Windows. Cobre commit e push da branch atual, reenvio sem novo commit, cancelamento, mensagem vazia, bloqueio de `.env` rastreado, ausência de branch ativa e preservação do commit após push rejeitado. Execute separadamente da suíte de regras:
+`tests/test_envio_github.py` valida as versões Python (`ferramentas/github/enviar.py`) e PowerShell do script de envio usando repositórios temporários e um remoto local, sem acessar o GitHub. Requer Git; os cenários PowerShell são ignorados quando ele não está disponível. O atalho `enviar.cmd` executa a versão Python, que usa somente a biblioteca padrão. Cobre commit e push da branch atual, reenvio sem novo commit, cancelamento, mensagem vazia, bloqueio de `.env` rastreado, ausência de branch ativa e preservação do commit após push rejeitado. Execute separadamente da suíte de regras:
 
 ```powershell
 python -B -m pytest tests/test_envio_github.py -p no:cacheprovider
@@ -141,3 +146,15 @@ Antes de abrir um pull request:
 - Atualizar a documentação afetada.
 
 Usar o [modelo de pull request](../.github/PULL_REQUEST_TEMPLATE.md) para explicar o que mudou, por quê, como foi validado e quais limitações permanecem. Em alterações exclusivamente documentais, a validação pode consistir na revisão dos links e na comparação das afirmações com o código, sem executar a automação.
+
+## Geração do executável
+
+O script [criar_executavel.py](../criar_executavel.py) usa PyInstaller no Windows para gerar `dist/AnexosConveniar.exe` em arquivo único, sem console. Instale as dependências de [requirements-build.txt](../requirements-build.txt) antes de executar o script. Ele usa caminhos relativos à sua própria localização, podendo ser chamado de outro diretório.
+
+O ícone é incorporado tanto ao arquivo executável quanto como recurso da janela. Os dados do CustomTkinter também são incluídos. A localização dos recursos usa `sys._MEIPASS` quando empacotado; a configuração externa usa a pasta de `sys.executable`, conforme a [documentação do PyInstaller](https://pyinstaller.org/en/stable/runtime-information.html).
+
+O `.env` deve ficar ao lado do executável; em execução pelo código-fonte, continua na raiz do repositório. O script não copia nem incorpora credenciais, Chrome ou ChromeDriver. Não é necessário distribuir a pasta `icon` separadamente.
+
+Cada compilação atualiza o executável de mesmo nome em `dist/`; feche o programa antes de recompilar. Os arquivos intermediários e o spec gerado ficam em `build/`, preservando o `main.spec` preexistente. `build/` e `dist/` são ignorados pelo Git. Use o script como procedimento de compilação; o `main.spec` antigo aponta para outro nome de ícone.
+
+O empacotamento não valida login, seletores nem downloads no Conveniar. As descrições anteriores da interface e automação ainda precisam ser reconciliadas com as alterações locais feitas pela equipe.

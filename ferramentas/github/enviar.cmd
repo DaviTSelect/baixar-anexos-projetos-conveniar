@@ -1,5 +1,5 @@
 @echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0enviar.ps1"
+python "%~dp0enviar.py"
 set "resultado=%errorlevel%"
 echo.
 pause

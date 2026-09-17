@@ -1,7 +1,7 @@
-from interface import Interface
+from interface import InterfaceAutomacao
 
 def main(): 
-    interface = Interface()
+    interface = InterfaceAutomacao()
     interface.iniciar()
 
 if __name__ == "__main__":

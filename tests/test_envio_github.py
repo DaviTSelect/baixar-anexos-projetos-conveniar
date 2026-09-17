@@ -1,15 +1,16 @@
-"""Integração do script Windows com Git e remoto local, sem acessar o GitHub."""
+"""Integração dos scripts com Git e remoto local, sem acessar o GitHub."""
 
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pytest
 
 
 pytestmark = pytest.mark.skipif(
-    not shutil.which("powershell.exe") or not shutil.which("git"),
-    reason="Requer PowerShell do Windows e Git",
+    not shutil.which("git"),
+    reason="Requer Git",
 )
 
 
@@ -20,8 +21,15 @@ def git(pasta, *args):
     ).stdout.strip()
 
 
+@pytest.fixture(params=['python', 'powershell'])
+def executor(request):
+    if request.param == 'powershell' and not shutil.which('powershell.exe'):
+        pytest.skip('Requer PowerShell do Windows')
+    return request.param
+
+
 @pytest.fixture
-def repositorio(tmp_path):
+def repositorio(tmp_path, executor):
     local = tmp_path / "projeto com espacos"
     remoto = tmp_path / "remoto.git"
     local.mkdir()
@@ -34,7 +42,8 @@ def repositorio(tmp_path):
     git(local, "remote", "add", "origin", str(remoto))
     pasta = local / "ferramentas" / "github"
     pasta.mkdir(parents=True)
-    origem = Path(__file__).resolve().parents[1] / "ferramentas" / "github" / "enviar.ps1"
+    extensao = 'py' if executor == 'python' else 'ps1'
+    origem = Path(__file__).resolve().parents[1] / "ferramentas" / "github" / f"enviar.{extensao}"
     shutil.copy2(origem, pasta)
     (local / ".gitignore").write_text(".env\n", encoding="utf-8")
     git(local, "add", ".")
@@ -43,9 +52,13 @@ def repositorio(tmp_path):
 
 
 def enviar(local, respostas):
+    python = local / 'ferramentas' / 'github' / 'enviar.py'
+    comando = [sys.executable, '-B', str(python)] if python.exists() else [
+        'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        str(local / 'ferramentas' / 'github' / 'enviar.ps1'),
+    ]
     return subprocess.run(
-        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-         str(local / "ferramentas" / "github" / "enviar.ps1")],
+        comando,
         input=respostas, capture_output=True, text=True, timeout=30,
     )
 

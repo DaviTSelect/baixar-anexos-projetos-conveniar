@@ -1,12 +1,19 @@
 """Configurações da automação."""
 
 import os
+import sys
 from pathlib import Path
+
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DOWNLOADS_DIR = BASE_DIR / "downloads"
+BASE_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent
+)
+
+
 
 load_dotenv(BASE_DIR / ".env")
 

@@ -3,6 +3,7 @@ from tkinter import messagebox
 import shutil
 import os
 from selenium import webdriver
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support.select import Select
@@ -10,32 +11,23 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 from dotenv import load_dotenv
 from pathlib import Path
-from config import DOWNLOADS_DIR,URL,USUARIO,SENHA,HEADLESS
+from config import URL,USUARIO,SENHA,HEADLESS
 from selenium.webdriver.chrome.service import Service
 
 
-def realizar_login():
+
+def realizar_login(diretorio_destino):
     """Usa as credenciais fixas configuradas no .env via config.py."""
 
-    DOWNLOADS_DIR.mkdir(
+    diretorio_destino.mkdir(
         parents=True,
         exist_ok=True
     )
 
-    # Configura Chrome
-    options = webdriver.ChromeOptions()
+    # ============================================================
+    # CONFIGURAÇÃO DO CHROME PORTÁTIL
+    # ============================================================
 
-    options.add_experimental_option(
-        "prefs",
-        {
-            "download.default_directory": str(DOWNLOADS_DIR),
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        }
-    )
-    #
-    
     user_profile = os.environ["USERPROFILE"]
 
     chromedriver_path = os.path.join(
@@ -53,14 +45,13 @@ def realizar_login():
         "chrome.exe"
     )
 
-
     # Verifica se o ChromeDriver existe
     if not os.path.isfile(chromedriver_path):
         root = tk.Tk()
         root.withdraw()
 
         messagebox.showerror(
-            "Arquivo não encontrado",
+            "ChromeDriver não encontrado",
             f"O ChromeDriver não foi encontrado.\n\n"
             f"Caminho esperado:\n{chromedriver_path}"
         )
@@ -68,14 +59,13 @@ def realizar_login():
         root.destroy()
         raise SystemExit
 
-
     # Verifica se o Chrome existe
     if not os.path.isfile(chrome_path):
         root = tk.Tk()
         root.withdraw()
 
         messagebox.showerror(
-            "Arquivo não encontrado",
+            "Google Chrome não encontrado",
             f"O Google Chrome não foi encontrado.\n\n"
             f"Caminho esperado:\n{chrome_path}"
         )
@@ -83,46 +73,86 @@ def realizar_login():
         root.destroy()
         raise SystemExit
 
+    # ============================================================
+    # CONFIGURAÇÃO DO SELENIUM
+    # ============================================================
 
-    # Se encontrou os dois, inicia o Selenium
+    options = webdriver.ChromeOptions()
+
+    # Usa exatamente o Chrome portátil informado acima
+    options.binary_location = chrome_path
+
+    # Configurações de download
+    options.add_experimental_option(
+        "prefs",
+        {
+            "download.default_directory": str(diretorio_destino),
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": True
+        }
+    )
+
+    # Headless, caso esteja habilitado
+    if HEADLESS:
+        options.add_argument("--headless=new")
+
+    # ============================================================
+    # INICIA O CHROMEDRIVER MANUAL
+    # ============================================================
+
     service = Service(
         executable_path=chromedriver_path
     )
 
-    
-    options.binary_location = chrome_path
-
-    
-
-    if HEADLESS:
-        options.add_argument("--headless=new")
-   
     driver = webdriver.Chrome(
-        options=options,service=service
+        service=service,
+        options=options
     )
-    
-    
-    #LOGIN
-    
-    wait = WebDriverWait(driver,30)
+
+    # ============================================================
+    # LOGIN
+    # ============================================================
+
+    wait = WebDriverWait(driver, 30)
+
     driver.get(URL)
-    
+
     usuario_login = wait.until(
-        EC.element_to_be_clickable((By.ID, "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_UserName"))
+        EC.element_to_be_clickable(
+            (
+                By.ID,
+                "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_UserName"
+            )
+        )
     )
+
     usuario_login.send_keys(USUARIO)
     aguardar_loader_desaparecer(driver)
     print("Usuario inserido!")
 
     senha_login = wait.until(
-            EC.element_to_be_clickable((By.ID, "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_Password"))
+        EC.element_to_be_clickable(
+            (
+                By.ID,
+                "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_Password"
+            )
         )
+    )
+
     senha_login.send_keys(SENHA)
     aguardar_loader_desaparecer(driver)
     print("Senha inserida!")
+
     entrar_login = wait.until(
-                EC.element_to_be_clickable((By.ID, "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_btnLogin"))
+        EC.element_to_be_clickable(
+            (
+                By.ID,
+                "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_btnLogin"
             )
+        )
+    )
+
     driver.execute_script(
         "arguments[0].scrollIntoView({block: 'center'});",
         entrar_login
@@ -132,12 +162,59 @@ def realizar_login():
         "arguments[0].click();",
         entrar_login
     )
+
     aguardar_loader_desaparecer(driver)
+
     print("Logado com sucesso!")
-   
-    print("-"*50)
-    
+    print("-" * 50)
+
     return driver
+def carregar_linhas_contratos(driver, timeout=30):
+    """Rola até o fim e relê as linhas até estabilizarem por dois segundos."""
+    seletor = "//tr[contains(@class, 'gridRow') or contains(@class, 'gridAlternateRow')]"
+    assinatura_anterior = None
+    estavel_desde = None
+
+    def linhas_estaveis(navegador):
+        nonlocal assinatura_anterior, estavel_desde
+        estado = navegador.execute_script("""
+            const pagina = document.scrollingElement || document.documentElement;
+            window.scrollTo(0, pagina.scrollHeight);
+            return {
+                carregada: document.readyState === 'complete',
+                altura: pagina.scrollHeight,
+                noFinal: pagina.scrollTop + pagina.clientHeight >= pagina.scrollHeight - 1
+            };
+        """)
+        if not (estado['carregada'] and estado['noFinal'] and
+                EC.invisibility_of_element_located((By.ID, 'imgLoad'))(navegador)):
+            assinatura_anterior = None
+            estavel_desde = None
+            return False
+
+        try:
+            # Relocaliza os elementos: o carregamento pode substituir as linhas.
+            linhas = navegador.find_elements(By.XPATH, seletor)
+            assinatura = (estado['altura'], tuple((linha.id, linha.text) for linha in linhas))
+        except StaleElementReferenceException:
+            assinatura_anterior = None
+            estavel_desde = None
+            return False
+
+        agora = time.monotonic()
+        if assinatura != assinatura_anterior:
+            assinatura_anterior = assinatura
+            estavel_desde = agora
+        if agora - estavel_desde >= 2:
+            # A tupla permite retornar também uma tabela vazia estabilizada.
+            return (linhas,)
+        return False
+
+    return WebDriverWait(driver, timeout).until(
+        linhas_estaveis,
+        message='As linhas dos contratos não estabilizaram no final da página.',
+    )[0]
+
 
 def buscar_contratos(driver,numero_projeto):
     wait = WebDriverWait(driver,30)
@@ -181,22 +258,7 @@ def buscar_contratos(driver,numero_projeto):
     btn_consultar.click()
     aguardar_loader_desaparecer(driver)
 
-    driver.execute_script(
-        "window.scrollTo(0, document.body.scrollHeight);"
-    )
-    aguardar_loader_desaparecer(driver)
-    driver.execute_script(
-        "window.scrollTo(0, document.body.scrollHeight);"
-    )
-    aguardar_loader_desaparecer(driver)
-    driver.execute_script(
-        "window.scrollTo(0, document.body.scrollHeight);"
-    )
-    aguardar_loader_desaparecer(driver)
-    linhas = driver.find_elements(
-    By.XPATH,
-    "//tr[contains(@class, 'gridRow') or contains(@class, 'gridAlternateRow')]"
-    )
+    linhas = carregar_linhas_contratos(driver)
 
     resultados = []
 
@@ -241,17 +303,17 @@ def buscar_contratos(driver,numero_projeto):
     #contrato = {href,projeto,tipo,situacao}
     
 
-def processar_contrato(driver, item, projeto):
+def processar_contrato(driver, item, projeto,diretorio_destino):
 
     contrato = item["contrato"]
 
     # Pasta downloads
     BASE_DIR = Path(__file__).resolve().parent.parent
-    PASTA_DOWNLOAD = BASE_DIR / "downloads"
+    pasta_download = diretorio_destino
 
     # downloads/377/1250_2026
     pasta_destino = (
-        PASTA_DOWNLOAD
+        diretorio_destino
         / str(projeto)
         / contrato.replace("/", "_")
     )
@@ -333,7 +395,7 @@ def processar_contrato(driver, item, projeto):
         # Arquivos existentes ANTES deste download
         arquivos_antes = {
             arquivo
-            for arquivo in PASTA_DOWNLOAD.iterdir()
+            for arquivo in pasta_download.iterdir()
             if arquivo.is_file()
         }
 
@@ -365,17 +427,25 @@ def processar_contrato(driver, item, projeto):
 
             arquivos_agora = {
                 arquivo
-                for arquivo in PASTA_DOWNLOAD.iterdir()
+                for arquivo in pasta_download.iterdir()
                 if arquivo.is_file()
             }
 
             novos = arquivos_agora - arquivos_antes
-
+            extensoes_temporarias = {
+                    ".crdownload",  # Chrome
+                    ".tmp",         # temporário
+                    ".part",        # Firefox/outros
+                    ".partial",     # download parcial
+                    ".download",    # alguns gerenciadores
+                    ".temp",
+                    ".!ut",         # uTorrent
+                }
             # Ignora .crdownload
             completos = [
                 arquivo
                 for arquivo in novos
-                if arquivo.suffix.lower() != ".crdownload"
+                if arquivo.suffix.lower() not in extensoes_temporarias
             ]
 
             if completos:
@@ -422,11 +492,10 @@ def processar_contrato(driver, item, projeto):
 
 
     
-def aguardar_loader_desaparecer(page, timeout=30):
-    """Aguarda o loader desaparecer antes de continuar.
-
-    Implemente o seletor real do loader quando a interface for mapeada.
-    """
-    raise NotImplementedError(
-        "Defina o seletor do loader e a estratégia de espera do navegador."
+def aguardar_loader_desaparecer(driver, timeout=30):
+    WebDriverWait(driver, timeout).until(
+        EC.invisibility_of_element_located(
+            (By.ID, "imgLoad")
+        )
     )
+    
