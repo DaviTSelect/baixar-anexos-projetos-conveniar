@@ -1,4 +1,5 @@
-from logging import root
+from queue import Queue, Empty
+from threading import Thread, Event
 from tkinter import filedialog, messagebox
 from customtkinter import (
     CTk,
@@ -29,9 +30,10 @@ class InterfaceAutomacao:
         self.app = CTk()
 
         set_appearance_mode("Dark")
+        self.app.configure(fg_color="#203447")
 
         self.app.title("Anexos - Contratos por Projeto")
-        self.app.geometry("600x400")
+        self.app.geometry("400x300")
         self.app.resizable(False, False)
 
         # Caminho do ícone
@@ -47,6 +49,13 @@ class InterfaceAutomacao:
 
         # Cria os componentes
         self.criar_componentes()
+        self.eventos = Queue()
+        self.cancelar = Event()
+        self.executando = False
+        self.fechando = False
+        self.worker = None
+        self.app.protocol("WM_DELETE_WINDOW", self.fechar)
+        self.app.after(100, self.consumir_eventos)
 
     def iniciar(self):
         self.app.mainloop()
@@ -59,28 +68,36 @@ class InterfaceAutomacao:
     def criar_componentes(self):
         #coloque os componentes aqui
         #criando frame fundo do projeto 1
-        self.Frame_fundoProjeto1 = CTkFrame(self.app, width=250,)
+        self.Frame_fundoProjeto1 = CTkFrame(self.app, width=250, fg_color="#203447")
         self.Frame_fundoProjeto1.grid(row=0, column=1, sticky="ns")
         self.Frame_fundoProjeto1.pack(pady=(20, 10), padx=(2, 2))
 
         #criando texto do numero do projeto
         self.label_Nprojeto = CTkLabel(self.Frame_fundoProjeto1,
                                       text="Anexos - Contratos por Projeto",
+                                      text_color="#efede5",
                                       font=CTkFont(size=20, weight="bold"))
         self.label_Nprojeto.pack(pady=(10, 10), padx=(20, 20))
 
         #criando canpo para digitar o numero do projeto
-        self.campo_N_projeto = CTkEntry(self.app, placeholder_text="Digite o numero do projeto", width=300)
+        self.campo_N_projeto = CTkEntry(
+            self.app, placeholder_text="Digite o numero do projeto", width=300,
+            fg_color="#203447", text_color="#efede5",
+            placeholder_text_color="#efede5", border_color="#efede5",
+        )
 
-        self.campo_N_projeto.pack(pady=(90,10))
+        self.campo_N_projeto.pack(pady=(50,10))
 
         #criando botao para conferir o numero do projeto
         self.botao_conferir_N_projeto = CTkButton(self.app,
                                                   text="Buscar",
+                                                  fg_color="#e94c1f", hover_color="#e94c1f",
+                                                  text_color="#efede5", text_color_disabled="#efede5",
                                                   command=self.botao_conferir_Projeto)
         self.botao_conferir_N_projeto.pack(pady=(10,10))
 
-        self.label_status = CTkLabel(self.app, text="Aguardando início.", wraplength=550)
+        self.label_status = CTkLabel(self.app, text="Aguardando início.", wraplength=550,
+                                     text_color="#efede5")
         self.label_status.pack(pady=(10, 10))
 
     
@@ -107,6 +124,8 @@ class InterfaceAutomacao:
 
     #função botão conferir N projeto
     def botao_conferir_Projeto(self):
+        if self.executando or self.fechando:
+            return
         N_projeto = self.campo_N_projeto.get().strip()
 
         # Verifica se foi informado apenas número
@@ -136,45 +155,85 @@ class InterfaceAutomacao:
 
     def atualizar_status(self, texto):
         self.label_status.configure(text=texto)
-        # Desenha o texto antes de entrar nas chamadas bloqueantes do Selenium.
-        self.app.update_idletasks()
 
     def botao_iniciar_processo(self):
-        numero_projeto = self.numero_projeto
-        diretorio = self.diretorio
+        if self.executando or self.fechando:
+            return
+        self.executando = True
+        self.cancelar.clear()
+        self.botao_conferir_N_projeto.configure(state="disabled")
+        self.campo_N_projeto.configure(state="disabled")
+        self.worker = Thread(
+            target=self.executar_automacao,
+            args=(self.numero_projeto, self.diretorio),
+            daemon=False,
+        )
+        self.worker.start()
+
+    def executar_automacao(self, numero_projeto, diretorio):
+        # O navegador pertence exclusivamente a esta thread. Só a fila chega à GUI.
         driver = None
         etapa = "login"
-        self.botao_conferir_N_projeto.configure(state="disabled")
+        erro = None
+        texto = "Processamento interrompido."
         try:
-            self.atualizar_status("Realizando login...")
-            driver = realizar_login(diretorio)
+            if self.cancelar.is_set():
+                return
+            self.eventos.put(("status", "Realizando login..."))
+            driver = realizar_login()
+            if self.cancelar.is_set():
+                return
+            etapa = "configuração da pasta de downloads"
+            diretorio.mkdir(parents=True, exist_ok=True)
+            driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
+                "behavior": "allow", "downloadPath": str(diretorio.resolve()),
+            })
             etapa = "consulta dos contratos"
-            self.atualizar_status("Buscando contratos...")
+            self.eventos.put(("status", "Buscando contratos..."))
             resultados = buscar_contratos(driver, numero_projeto)
-
             for item in resultados:
+                if self.cancelar.is_set():
+                    return
                 etapa = f"contrato {item['contrato']}"
-                self.atualizar_status(f"Baixando anexos do contrato {item['contrato']}...")
+                self.eventos.put(("status", f"Baixando anexos do contrato {item['contrato']}..."))
                 processar_contrato(driver, item, numero_projeto, diretorio)
-
-            self.atualizar_status(
-                "Downloads concluídos." if resultados else "Nenhum contrato encontrado."
-            )
+            texto = "Downloads concluídos." if resultados else "Nenhum contrato encontrado."
         except Exception:
-            self.atualizar_status(f"Falha no processamento: {etapa}.")
-            messagebox.showerror(title="Erro", message=f"Falha no processamento: {etapa}.")
-            return
+            erro = f"Falha no processamento: {etapa}."
         finally:
-            try:
-                if driver is not None:
+            if driver is not None:
+                try:
                     driver.quit()
-            finally:
-                self.botao_conferir_N_projeto.configure(state="normal")
+                except Exception:
+                    erro = erro or "Falha ao encerrar o navegador."
+            self.eventos.put(("fim", (texto, erro)))
 
-        messagebox.showinfo(title="Sucesso", message="Todos os contratos foram processados com sucesso!")
+    def consumir_eventos(self):
+        try:
+            while True:
+                tipo, dados = self.eventos.get_nowait()
+                if tipo == "status" and not self.fechando:
+                    self.atualizar_status(dados)
+                elif tipo == "fim":
+                    self.executando = False
+                    if not self.fechando:
+                        texto, erro = dados
+                        self.botao_conferir_N_projeto.configure(state="normal")
+                        self.campo_N_projeto.configure(state="normal")
+                        self.atualizar_status(erro or texto)
+                        if erro:
+                            messagebox.showerror(title="Erro", message=erro, parent=self.app)
+                        else:
+                            messagebox.showinfo(title="Conclusão", message=texto, parent=self.app)
+        except Empty:
+            pass
+        if self.fechando and (self.worker is None or not self.worker.is_alive()):
+            self.app.destroy()
+            return
+        self.app.after(100, self.consumir_eventos)
 
-
-
-
-
-    
+    def fechar(self):
+        self.fechando = True
+        self.cancelar.set()
+        self.botao_conferir_N_projeto.configure(state="disabled")
+        self.atualizar_status("Encerrando: aguardando a operação atual e fechando o navegador...")

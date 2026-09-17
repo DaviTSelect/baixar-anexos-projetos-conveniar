@@ -1,6 +1,10 @@
-from interface import InterfaceAutomacao
+from launcher import Inicializador
 
-def main(): 
+def main():
+    if not Inicializador().iniciar():
+        return
+    from interface import InterfaceAutomacao
+
     interface = InterfaceAutomacao()
     interface.iniciar()
 
