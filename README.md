@@ -11,11 +11,11 @@ Automação interna do setor de projetos para baixar os anexos dos contratos de 
 
 O código contém rotinas de login, busca e download, mas o fluxo completo ainda não está operacional:
 
-- A interface exibe apenas o rótulo `Número do projeto`; não há campo de entrada nem botão conectado à automação.
+- A interface permite informar o projeto, selecionar a pasta e iniciar a automação. Um rótulo mostra o contrato cujos anexos estão sendo processados, além das etapas de login, consulta, conclusão ou falha.
 - `aguardar_loader_desaparecer` lança `NotImplementedError`, interrompendo as rotinas que a chamam.
-- A busca lê as linhas da página atual, sem implementar paginação.
+- Antes de processar os contratos, a busca rola até o fim da página e relê as linhas até permanecerem estáveis por dois segundos, com timeout de 30 segundos. O processamento começa pela primeira linha; a paginação ainda não está implementada.
 - `tests/test_regras.py` importa `src.contratos`, módulo ausente no repositório.
-- `requirements.txt` lista `python-dotenv` e `pytest`, mas não inclui `selenium` e `customtkinter`, importados pelo código.
+- As dependências de execução estão declaradas em `requirements.txt`.
 
 ## Fluxo pretendido
 
@@ -80,6 +80,7 @@ baixar-anexos-projetos-conveniar/
 ├── ferramentas/
 │   └── github/
 │       ├── enviar.cmd
+│       ├── enviar.py
 │       ├── enviar.ps1
 │       └── README.md
 ├── .github/
@@ -99,4 +100,17 @@ O arquivo `.env` contém a configuração local; `downloads/` armazena os arquiv
 
 Consulte o [guia de desenvolvimento](docs/desenvolvimento.md) para responsabilidades dos módulos, limitações conhecidas e orientações de manutenção.
 
-Para começar na equipe, leia o [guia básico de Git e GitHub](docs/github-basico.md) e os [exemplos de componentes de interface](docs/componentes-interface.md). A pasta [ferramentas/github](ferramentas/github/README.md) contém o atalho `enviar.cmd`, que pede a mensagem de commit e envia a branch atual após a revisão dos arquivos e a confirmação do usuário.
+Para começar na equipe, leia o [guia básico de Git e GitHub](docs/github-basico.md) e os [exemplos de componentes de interface](docs/componentes-interface.md). Execute `python ferramentas/github/enviar.py` para informar a mensagem de commit e enviar a branch atual após revisar os arquivos e confirmar. No Windows, o atalho `enviar.cmd` chama esse mesmo script. Consulte as instruções em [ferramentas/github](ferramentas/github/README.md).
+
+## Executável para Windows
+
+Para gerar novamente o executável, execute na raiz do projeto:
+
+```powershell
+python -m pip install -r requirements-build.txt
+python criar_executavel.py
+```
+
+O resultado é `dist/AnexosConveniar.exe`, com o ícone `icon/logo.ico` e os recursos da interface incluídos. Para usar, configure um arquivo `.env` ao lado do `.exe`, com as variáveis descritas acima. As credenciais não são incorporadas ao executável. Chrome e ChromeDriver continuam necessários nos caminhos indicados neste README; Python não é necessário na máquina que apenas executa o programa.
+
+Consulte os detalhes de empacotamento no [guia de desenvolvimento](docs/desenvolvimento.md#geração-do-executável).

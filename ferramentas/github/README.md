@@ -2,10 +2,10 @@
 
 Use esta pasta para salvar suas alterações em um commit e enviar a branch atual para `origin`. Leia também o [guia básico de Git e GitHub](../../docs/github-basico.md).
 
-## Como usar no Windows
+## Como usar
 
 1. Salve os arquivos no editor e confira se as alterações pertencem à sua tarefa.
-2. Dê dois cliques em `enviar.cmd` ou execute `.\ferramentas\github\enviar.cmd` no terminal da raiz do projeto.
+2. Execute `python ferramentas/github/enviar.py` no terminal da raiz do projeto. No Windows, também pode dar dois cliques em `enviar.cmd`, que agora chama a versão Python.
 3. Confira a branch e a lista de arquivos exibidas. **Todos os arquivos alterados, novos e excluídos que não estejam ignorados serão incluídos**, além dos que já estavam preparados no Git.
 4. Digite uma mensagem, como `docs: adiciona exemplos de interface`.
 5. Digite `SIM` para criar o commit e enviar. Qualquer outra resposta cancela antes de preparar os arquivos.
@@ -17,11 +17,12 @@ Sem alterações, ele oferece enviar os commits já existentes, sem pedir nova m
 ## Antes da primeira execução
 
 - Tenha o Git instalado e disponível no terminal: `git --version`.
+- Tenha Python 3 disponível no terminal: `python --version`. O script usa apenas a biblioteca padrão, sem dependências adicionais.
 - Configure seu nome e e-mail conforme o guia básico.
 - Confira `git remote -v`: `origin` deve apontar para o repositório correto da equipe. O script usa esse destino já configurado.
 - Tenha acesso ao repositório e autenticação pelo Git configurada. Se necessário, siga o login solicitado pelo gerenciador de credenciais; o script não armazena senhas.
 
-O `.cmd` usa `ExecutionPolicy Bypass` somente no processo PowerShell que executa este script; não altera a política permanente do computador. Se uma política da organização bloquear a execução, peça orientação à equipe.
+O script Python localiza o repositório pela própria localização em `ferramentas/github`, mesmo quando executado a partir de outra pasta. A versão anterior `enviar.ps1` permanece disponível para uso direto pelo PowerShell; o `.cmd` não depende mais dela.
 
 ## Se houver erro
 
