@@ -10,6 +10,22 @@ from selenium.common.exceptions import StaleElementReferenceException, TimeoutEx
 
 
 class CarregamentoTests(unittest.TestCase):
+    def test_login_fecha_navegador_quando_navegacao_falha(self):
+        driver = Mock()
+        driver.get.side_effect = RuntimeError('falha simulada')
+        with patch.dict(self.browser.os.environ, {'USERPROFILE': 'C:/ficticio'}), \
+                patch.object(self.browser.os.path, 'isfile', return_value=True), \
+                patch.object(self.browser.webdriver, 'Chrome', return_value=driver):
+            with self.assertRaises(RuntimeError):
+                self.browser.realizar_login(Mock())
+        driver.quit.assert_called_once()
+
+    def test_driver_ausente_gera_excecao_sem_interface_grafica(self):
+        with patch.dict(self.browser.os.environ, {'USERPROFILE': 'C:/ficticio'}), \
+                patch.object(self.browser.os.path, 'isfile', return_value=False):
+            with self.assertRaises(FileNotFoundError):
+                self.browser.realizar_login(Mock())
+
     def setUp(self):
         config = types.ModuleType('config')
         config.URL = config.USUARIO = config.SENHA = ''

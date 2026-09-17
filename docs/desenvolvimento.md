@@ -8,19 +8,26 @@ Para apoio ao estagiário, consulte o [guia básico de Git e GitHub](github-basi
 
 | Arquivo | Responsabilidade atual |
 | --- | --- |
-| `src/main.py` | Instancia `Interface` e inicia o laço da interface gráfica. |
+| `src/main.py` | Abre o inicializador e, ao continuar, instancia `InterfaceAutomacao`. |
+| `src/launcher.py` | Oferece consultar releases ou continuar na versão atual, antes do painel. |
 | `src/interface.py` | Cria a janela CustomTkinter, recebe o projeto e a pasta, inicia a automação e mostra o contrato em processamento. |
-| `src/browser.py` | Contém as rotinas de login, consulta e download, além da função de espera do loader ainda não implementada. |
+| `src/browser.py` | Contém as rotinas de login, consulta e download, além da espera do loader por invisibilidade de `imgLoad`. |
 | `src/config.py` | Lê as variáveis de ambiente e define os caminhos da raiz e dos downloads. |
 | `tests/test_regras.py` | Define testes de situação e normalização, mas importa um módulo ausente. |
 
 ## Integração do painel e autenticação
 
+O inicializador (`src/launcher.py`, Tkinter) e o painel principal (`src/interface.py`, CustomTkinter) usam fundo `#203447`, texto `#efede5` e botões `#e94c1f`, com cores explícitas nos widgets. Os diálogos nativos mantêm o tema do sistema operacional.
+
 O painel possui entrada para o número do projeto, seleção de pasta e botão de execução. O rótulo de status mostra login, consulta e `Baixando anexos do contrato <número>...` antes de processar cada contrato. Ao terminar, indica conclusão, ausência de contratos ou a etapa que falhou.
 
-O texto é redesenhado com `update_idletasks()` antes das chamadas do Selenium. A execução continua síncrona: o rótulo identifica o contrato em processamento, mas não mede o progresso dos arquivos, e a janela ainda pode ficar sem responder durante esperas longas. O botão fica desabilitado durante o processamento; o navegador retornado pelo login é encerrado ao final, inclusive em falhas.
+Login, consulta, download e encerramento do navegador executam em uma única thread de trabalho. Ela publica mensagens em `Queue`; `after(100, ...)` consome a fila na thread principal, responsável por todos os widgets e diálogos. O botão e o campo do projeto ficam desabilitados durante o processamento, impedindo execuções simultâneas. O rótulo identifica o contrato, sem medir o progresso de cada arquivo.
 
-O painel deve chamar `realizar_login()` sem argumentos. A rotina usa `USUARIO` e `SENHA` de `src/config.py`, que carrega o `.env` da raiz. Não há persistência de credenciais em JSON, campos de login ou opção de logout local no painel. O login continua sujeito à limitação do loader descrita abaixo.
+Ao fechar a janela, um `Event` solicita interrupção entre etapas e contratos. A janela continua atendendo eventos enquanto aguarda a operação em curso e `driver.quit()`; não há interrupção forçada de um download nem `join()` bloqueante na GUI. Uma chamada do navegador que não retorne pode atrasar esse encerramento. Falhas de processamento ou de fechamento são comunicadas sem expor a exceção bruta.
+
+`realizar_login()` mantém as credenciais no `.env` e aceita também o parâmetro opcional de diretório para compatibilidade. O painel chama sem argumentos e, após o login, configura a pasta selecionada via `Browser.setDownloadBehavior`. O destino inicial padrão do login é `downloads/`. A configuração do destino via CDP precisa de validação com o Chrome utilizado pela equipe. O módulo do navegador não abre janelas Tk; arquivos de Chrome/ChromeDriver ausentes geram exceções. Se o login falhar depois de criar o navegador, ele tenta encerrá-lo antes de propagar a falha.
+
+O painel deve chamar `realizar_login()` sem argumentos. A rotina usa `USUARIO` e `SENHA` de `src/config.py`, que carrega o `.env` da raiz. Não há persistência de credenciais em JSON, campos de login ou opção de logout local no painel. Os sinais de login e o seletor do loader ainda precisam de confirmação no sistema.
 
 ## Consulta e situação dos contratos
 
@@ -43,7 +50,7 @@ Cada resultado contém `contrato`, `projeto`, `status` e `link`. O link é um el
 
 ## Loader e paginação
 
-`aguardar_loader_desaparecer(page, timeout=30)` ainda lança `NotImplementedError`. Embora as rotinas a chamem, não há espera efetiva pelo loader, e essas chamadas interrompem a execução.
+`aguardar_loader_desaparecer(driver, timeout=30)` usa `WebDriverWait` e a invisibilidade do elemento `imgLoad`. A implementação já existia antes da separação das threads; o seletor e seu comportamento ainda precisam de validação real no Conveniar.
 
 O requisito é aguardar uma condição real da página com timeout após operações que provoquem carregamento. O código também contém esperas fixas com `time.sleep()`.
 
@@ -58,13 +65,13 @@ Quando implementada, a paginação deverá:
 
 ## Processamento e downloads
 
-A sequência presente em `processar_contrato(driver, item, projeto)`, atualmente bloqueada pelas chamadas ao loader, é:
+A sequência presente em `processar_contrato(driver, item, projeto, diretorio_destino)` é:
 
-1. Criar `downloads/<projeto>/<contrato>/`, substituindo `/` por `_` no contrato.
+1. Criar `<diretorio_destino>/<projeto>/<contrato>/`, substituindo `/` por `_` no contrato.
 2. Guardar a janela atual, clicar no link e selecionar a última janela do navegador.
 3. Abrir a aba `Arquivos` e localizar a tabela de anexos.
 4. Coletar o primeiro botão `Baixar arquivo` de cada linha que tenha esse botão.
-5. Acionar cada download e procurar um novo arquivo em `downloads/`, ignorando a extensão `.crdownload`.
+5. Acionar cada download e procurar um novo arquivo na pasta selecionada, ignorando a extensão `.crdownload`.
 6. Mover o arquivo para a pasta do contrato, se o nome ainda não existir no destino.
 7. Fechar a janela do contrato e retornar à anterior.
 
@@ -78,10 +85,9 @@ Se a tabela existir, mas não tiver botões de download, o laço de downloads fi
 
 Além do loader e da paginação:
 
-- A automação executa na mesma thread da interface e bloqueia a interação durante as chamadas do Selenium.
 - A busca limpa apenas a data inicial, sem limpar todos os filtros de data.
 - O navegador depende dos caminhos fixos para Windows descritos no README.
-- Não há tratamento que assegure continuar nos demais contratos após uma exceção, nem fechamento garantido das janelas em caso de falha.
+- Uma exceção interrompe o processamento dos demais contratos. A thread tenta encerrar toda a sessão do navegador no `finally`.
 
 Esses pontos são registros de documentação, não correções implementadas.
 
@@ -149,7 +155,7 @@ Usar o [modelo de pull request](../.github/PULL_REQUEST_TEMPLATE.md) para explic
 
 ## Geração do executável
 
-O script [criar_executavel.py](../criar_executavel.py) usa PyInstaller no Windows para gerar `dist/AnexosConveniar.exe` em arquivo único, sem console. Instale as dependências de [requirements-build.txt](../requirements-build.txt) antes de executar o script. Ele usa caminhos relativos à sua própria localização, podendo ser chamado de outro diretório.
+O script [criar_executavel.py](../criar_executavel.py) usa PyInstaller no Windows para gerar `dist/Anexos - Contratos por Projeto.exe` em arquivo único, sem console. Instale as dependências de [requirements-build.txt](../requirements-build.txt) antes de executar o script. Ele usa caminhos relativos à sua própria localização, podendo ser chamado de outro diretório.
 
 O ícone é incorporado tanto ao arquivo executável quanto como recurso da janela. Os dados do CustomTkinter também são incluídos. A localização dos recursos usa `sys._MEIPASS` quando empacotado; a configuração externa usa a pasta de `sys.executable`, conforme a [documentação do PyInstaller](https://pyinstaller.org/en/stable/runtime-information.html).
 
@@ -158,3 +164,27 @@ O `.env` deve ficar ao lado do executável; em execução pelo código-fonte, co
 Cada compilação atualiza o executável de mesmo nome em `dist/`; feche o programa antes de recompilar. Os arquivos intermediários e o spec gerado ficam em `build/`, preservando o `main.spec` preexistente. `build/` e `dist/` são ignorados pelo Git. Use o script como procedimento de compilação; o `main.spec` antigo aponta para outro nome de ícone.
 
 O empacotamento não valida login, seletores nem downloads no Conveniar. As descrições anteriores da interface e automação ainda precisam ser reconciliadas com as alterações locais feitas pela equipe.
+
+O empacotamento inclui explicitamente os módulos `selenium.webdriver.chrome.webdriver` e `selenium.webdriver.chrome.options`, carregados dinamicamente pelo Selenium, além dos arquivos de dados da biblioteca. Sem esses módulos, o código-fonte pode funcionar, mas o executável falha antes de iniciar o Chrome com `ModuleNotFoundError`. Após alterar o script de geração, recompile o executável.
+
+## Threads e consulta de releases
+
+`gerar_launcher.py` é o gerador do launcher independente. Ele copia `src/launcher.py` para `launcher.py` na raiz, preservando uma forma reproduzível de gerar o arquivo após futuras alterações no fluxo de atualização. O launcher consulta releases e abre a página de download manual; não instala arquivos nem substitui o executável automaticamente.
+
+`criar_executavel_launcher.py` empacota `src/launcher.py` com PyInstaller em um executável separado, `dist/Launcher - Anexos - Contratos por Projeto.exe`. O arquivo usa janela sem console, o ícone do projeto e os módulos de `src` necessários para abrir o fluxo inicial e consultar atualizações. Os arquivos intermediários ficam em `build/pyinstaller-launcher/`.
+
+`src/update.py` consulta a API de última release do GitHub usando a biblioteca padrão, sem `requests`. `src/main.py` abre primeiro `Inicializador`, de `src/launcher.py`. O botão de verificação inicia uma thread daemon separada, impede consultas simultâneas e permite tentar novamente após o resultado. O worker retorna apenas texto e um indicador para uma fila; somente a thread principal acessa os widgets.
+
+Continuar fecha o inicializador e abre o painel, inclusive com uma consulta em andamento. Fechar pelo X encerra sem abrir o painel. O callback de consumo da fila é cancelado antes de destruir a janela; resultados tardios não acessam widgets. A consulta não precisa terminar para continuar ou sair. Quando disponível, a atualização é obtida manualmente pelo botão que abre a página da release; abrir essa página mantém a opção de continuar na versão instalada.
+
+A comparação usa tuplas numéricas de `MAJOR.MINOR.PATCH`, com prefixo `v` opcional, e ignora drafts e prereleases. Formatos inválidos, JSON inválido, erros HTTP e de rede resultam em aviso não bloqueante. HTTP 404 pode significar ausência de release ou repositório não acessível; não se afirma que o aplicativo esteja atualizado nesses casos. A consulta é pública, sem token, e não instala nem substitui o executável.
+
+`VERSAO_ATUAL = "1.0.0"` é o valor local configurado, sem comprovar publicação. Atualize essa constante para a versão aprovada antes de gerar o executável e publicar a release correspondente. O módulo é importado pelo inicializador e incluído pelo empacotador. Recompile para usar estas alterações no `.exe` existente.
+
+Verificação isolada, sem credenciais, navegador real ou rede:
+
+```powershell
+python -B -m pytest tests/test_launcher.py tests/test_interface_threads.py tests/test_update.py tests/test_carregamento.py -p no:cacheprovider
+```
+
+Os testes verificam que uma operação bloqueada no worker deixa a thread principal livre, não acessa widgets, impede execução duplicada, encerra o navegador em falhas e respeita o fechamento cooperativo. Também cobrem comparação numérica de versões, respostas inválidas, ausência de release, limite HTTP e timeout. Os testes do inicializador cobrem continuar sem consulta ou durante a espera de rede, fechar sem abrir o painel, falhas de consulta e abertura manual da página da release. Isso não substitui validação da janela e dos downloads reais no Conveniar.

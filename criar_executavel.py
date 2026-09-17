@@ -1,4 +1,4 @@
-"""Gera dist/AnexosConveniar.exe com o ícone e os recursos da interface."""
+"""Gera o executável em dist com o ícone e os recursos da interface."""
 
 from importlib.util import find_spec
 from pathlib import Path
@@ -35,12 +35,16 @@ def main():
             "--icon", str(icone),
             "--add-data", f"{icone};icon",
             "--collect-data", "customtkinter",
+            # O Selenium carrega o driver do Chrome dinamicamente.
+            "--hidden-import", "selenium.webdriver.chrome.webdriver",
+            "--hidden-import", "selenium.webdriver.chrome.options",
+            "--collect-data", "selenium",
             str(raiz / "src" / "main.py"),
         ],
         cwd=raiz,
         check=True,
     )
-    print(f"Executável criado: {raiz / 'dist' / 'Anexos - Contratos por Projeto.exe.exe'}")
+    print(f"Executável criado: {raiz / 'dist' / 'Anexos - Contratos por Projeto.exe'}")
     print("Configure o .env ao lado do executável antes de usar a automação.")
 
 

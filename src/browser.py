@@ -1,5 +1,3 @@
-import tkinter as tk
-from tkinter import messagebox
 import shutil
 import os
 from selenium import webdriver
@@ -16,8 +14,12 @@ from selenium.webdriver.chrome.service import Service
 
 
 
-def realizar_login(diretorio_destino):
+def realizar_login(diretorio_destino=None):
     """Usa as credenciais fixas configuradas no .env via config.py."""
+
+    if diretorio_destino is None:
+        from config import BASE_DIR
+        diretorio_destino = BASE_DIR / "downloads"
 
     diretorio_destino.mkdir(
         parents=True,
@@ -47,31 +49,11 @@ def realizar_login(diretorio_destino):
 
     # Verifica se o ChromeDriver existe
     if not os.path.isfile(chromedriver_path):
-        root = tk.Tk()
-        root.withdraw()
-
-        messagebox.showerror(
-            "ChromeDriver não encontrado",
-            f"O ChromeDriver não foi encontrado.\n\n"
-            f"Caminho esperado:\n{chromedriver_path}"
-        )
-
-        root.destroy()
-        raise SystemExit
+        raise FileNotFoundError("ChromeDriver não encontrado no caminho configurado.")
 
     # Verifica se o Chrome existe
     if not os.path.isfile(chrome_path):
-        root = tk.Tk()
-        root.withdraw()
-
-        messagebox.showerror(
-            "Google Chrome não encontrado",
-            f"O Google Chrome não foi encontrado.\n\n"
-            f"Caminho esperado:\n{chrome_path}"
-        )
-
-        root.destroy()
-        raise SystemExit
+        raise FileNotFoundError("Google Chrome não encontrado no caminho configurado.")
 
     # ============================================================
     # CONFIGURAÇÃO DO SELENIUM
@@ -114,59 +96,66 @@ def realizar_login(diretorio_destino):
     # LOGIN
     # ============================================================
 
-    wait = WebDriverWait(driver, 30)
+    try:
+        wait = WebDriverWait(driver, 30)
 
-    driver.get(URL)
+        driver.get(URL)
 
-    usuario_login = wait.until(
-        EC.element_to_be_clickable(
-            (
-                By.ID,
-                "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_UserName"
+        usuario_login = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.ID,
+                    "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_UserName"
+                )
             )
         )
-    )
 
-    usuario_login.send_keys(USUARIO)
-    aguardar_loader_desaparecer(driver)
-    print("Usuario inserido!")
+        usuario_login.send_keys(USUARIO)
+        aguardar_loader_desaparecer(driver)
+        print("Usuario inserido!")
 
-    senha_login = wait.until(
-        EC.element_to_be_clickable(
-            (
-                By.ID,
-                "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_Password"
+        senha_login = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.ID,
+                    "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_Password"
+                )
             )
         )
-    )
 
-    senha_login.send_keys(SENHA)
-    aguardar_loader_desaparecer(driver)
-    print("Senha inserida!")
+        senha_login.send_keys(SENHA)
+        aguardar_loader_desaparecer(driver)
+        print("Senha inserida!")
 
-    entrar_login = wait.until(
-        EC.element_to_be_clickable(
-            (
-                By.ID,
-                "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_btnLogin"
+        entrar_login = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.ID,
+                    "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_btnLogin"
+                )
             )
         )
-    )
 
-    driver.execute_script(
-        "arguments[0].scrollIntoView({block: 'center'});",
-        entrar_login
-    )
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});",
+            entrar_login
+        )
 
-    driver.execute_script(
-        "arguments[0].click();",
-        entrar_login
-    )
+        driver.execute_script(
+            "arguments[0].click();",
+            entrar_login
+        )
 
-    aguardar_loader_desaparecer(driver)
+        aguardar_loader_desaparecer(driver)
 
-    print("Logado com sucesso!")
-    print("-" * 50)
+        print("Logado com sucesso!")
+        print("-" * 50)
+
+    except BaseException:
+        try:
+            driver.quit()
+        finally:
+            raise
 
     return driver
 def carregar_linhas_contratos(driver, timeout=30):
