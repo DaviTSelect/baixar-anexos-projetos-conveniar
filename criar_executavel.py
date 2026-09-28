@@ -11,7 +11,7 @@ def main():
         raise SystemExit("Execute este script no Windows para gerar o .exe.")
 
     raiz = Path(__file__).resolve().parent
-    for modulo in ("PyInstaller", "customtkinter", "selenium", "dotenv"):
+    for modulo in ("PyInstaller", "customtkinter", "selenium", "dotenv", "certifi"):
         if find_spec(modulo) is None:
             raise SystemExit(
                 "Dependências ausentes. Execute: "
@@ -35,6 +35,7 @@ def main():
             "--icon", str(icone),
             "--add-data", f"{icone};icon",
             "--collect-data", "customtkinter",
+            "--collect-data", "certifi",
             # O Selenium carrega o driver do Chrome dinamicamente.
             "--hidden-import", "selenium.webdriver.chrome.webdriver",
             "--hidden-import", "selenium.webdriver.chrome.options",

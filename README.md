@@ -1,4 +1,4 @@
-﻿# Baixar Anexos de Contratos de Bolsistas por Projeto
+# Baixar Anexos de Contratos de Bolsistas por Projeto
 
 Automação interna do setor de projetos para baixar os anexos dos contratos de bolsistas vinculados a um projeto no Conveniar.
 
@@ -13,15 +13,15 @@ O código contém rotinas de login, busca e download, mas o fluxo completo ainda
 
 - A interface permite informar o projeto, selecionar a pasta e iniciar a automação. Um rótulo mostra o contrato cujos anexos estão sendo processados, além das etapas de login, consulta, conclusão ou falha.
 - Login, consulta e downloads executam em uma thread separada, mantendo a janela responsiva. Ao fechar durante o processamento, o aplicativo aguarda o contrato atual e encerra o navegador.
-- Ao abrir, oferece verificar atualizações ou continuar usando a versão atual. A consulta roda em segundo plano e permite abrir a página de download quando há versão mais recente.
+- Ao abrir, verifica atualizações automaticamente. Só abre o painel após confirmar a versão local. Uma versão nova exige download e execução do instalador; falhas mantêm o painel bloqueado.
 - A espera do loader usa a invisibilidade de `imgLoad` com timeout; o seletor ainda precisa ser confirmado no Conveniar.
 - Antes de processar os contratos, a busca rola até o fim da página e relê as linhas até permanecerem estáveis por dois segundos, com timeout de 30 segundos. O processamento começa pela primeira linha; a paginação ainda não está implementada.
-- `tests/test_regras.py` importa `src.contratos`, módulo ausente no repositório.
+- Os testes de regras exercitam a consulta real com navegador simulado. Consulte a [cobertura e as pendências de QA](docs/testes.md).
 - As dependências de execução estão declaradas em `requirements.txt`.
 
 ## Fluxo pretendido
 
-O painel gráfico permitirá inserir o número do projeto. A autenticação usa as credenciais fixas `USUARIO` e `SENHA` configuradas no `.env`, sem armazenamento em JSON ou campos de login no painel. A implementação visual está sendo realizada separadamente por outro integrante da equipe.
+O painel gráfico permite inserir o número do projeto. A autenticação usa as credenciais fixas `USUARIO` e `SENHA` configuradas no `.env`, sem armazenamento em JSON ou campos de login no painel. A implementação visual está sendo realizada separadamente por outro integrante da equipe.
 
 1. Realizar login.
 2. Acessar a busca e selecionar `Contrato de Bolsa`.
@@ -35,7 +35,7 @@ Esse fluxo descreve o objetivo do projeto. Atualmente, a busca limpa apenas a da
 
 ## Downloads
 
-A rotina configura a pasta escolhida no painel como destino dos downloads e move cada arquivo para a subpasta do projeto e do contrato. As barras `/` do número do contrato são substituídas por `_`.
+A rotina baixa cada anexo em uma pasta isolada e move o arquivo concluído para a subpasta do projeto e do contrato, dentro da pasta escolhida no painel. Aguarda o loader desaparecer e o arquivo estabilizar sem extensões temporárias antes de seguir para o próximo anexo. As barras `/` do número do contrato são substituídas por `_`.
 
 Exemplo: o contrato `1250/2026` do projeto `377` usa `downloads/377/1250_2026/`.
 
@@ -67,14 +67,21 @@ Nunca versionar `.env` nem incluir credenciais nos logs ou na documentação.
 baixar-anexos-projetos-conveniar/
 ├── src/
 │   ├── __init__.py
+│   ├── launcher.py
+│   ├── update.py
 │   ├── main.py
 │   ├── browser.py
 │   ├── interface.py
 │   └── config.py
 ├── tests/
-│   ├── __init__.py
+│   ├── test_carregamento.py
+│   ├── test_downloads.py
 │   ├── test_envio_github.py
-│   └── test_regras.py
+│   ├── test_interface_threads.py
+│   ├── test_launcher.py
+│   ├── test_regras.py
+│   ├── test_update.py
+│   └── test_update_ssl.py
 ├── docs/
 │   ├── componentes-interface.md
 │   ├── github-basico.md
@@ -117,14 +124,42 @@ O resultado é `dist/Anexos - Contratos por Projeto.exe`, com o ícone `icon/log
 
 Consulte os detalhes de empacotamento no [guia de desenvolvimento](docs/desenvolvimento.md#geração-do-executável).
 
+O executável inclui os certificados do `certifi` para as conexões HTTPS de atualização, preservando também os certificados confiáveis do Windows. Se uma versão antiga apresentar `CERTIFICATE_VERIFY_FAILED`, atualize as dependências com `python -m pip install --upgrade certifi -r requirements-build.txt` e gere novamente o executável. Em redes com inspeção HTTPS, a autoridade certificadora da organização também precisa ser confiável no Windows; consulte a equipe de TI se a falha persistir.
+
 ## Consulta de atualizações
 
-Os dois painéis usam fundo azul `#203447`, textos brancos `#efede5` e botões laranja `#e94c1f`. Diálogos nativos de aviso e seleção de pasta seguem a aparência do Windows.
+O inicializador consulta automaticamente a última release estável pública de `DaviTSelect/baixar-anexos-projetos-conveniar`, com timeout de 15 segundos na requisição. A versão local vem de `VERSAO_ATUAL`, em `src/update.py` (atualmente `1.1.2`); esse valor não comprova publicação.
 
-Para gerar novamente o launcher independente de atualizações, execute `python gerar_launcher.py`. O script cria `launcher.py` na raiz usando a implementação mantida em `src/launcher.py`; depois, execute `python launcher.py` para abrir a consulta de atualizações.
+- Versão local igual ou superior: abre o painel.
+- Versão nova: baixa o primeiro arquivo terminado em `.exe` e tenta executá-lo como instalador no Windows. O aplicativo atual encerra; a instalação e a reabertura dependem do arquivo publicado.
+- Falha de rede, certificado, release inválida ou ausência de instalador: oferece **Tentar novamente**, sem liberar o painel.
+- Fechar fora do download encerra sem abrir o painel. Durante o download, o fechamento é bloqueado.
 
-Para gerar o launcher como executável independente no Windows, execute `python criar_executavel_launcher.py`. O resultado será `dist/Launcher - Anexos - Contratos por Projeto.exe`; ele pode ser distribuído sem Python e consulta as atualizações antes de abrir o aplicativo principal. Feche o executável antes de recompilar.
+Não existe opção de continuar sem verificar. Os dois painéis usam fundo azul, textos claros e botões laranja; diálogos nativos seguem o tema do Windows.
 
-A tela inicial oferece **Verificar atualização** e **Continuar usando a versão atual**. A consulta busca a última release estável pública de `DaviTSelect/baixar-anexos-projetos-conveniar`, com timeout de 10 segundos na requisição. É possível continuar mesmo durante a consulta; falta de rede, limite da API ou ausência de release não impedem o uso. Quando há atualização, **Abrir página para download** abre a release no navegador, para download manual, sem instalar ou substituir arquivos. Fechar a tela inicial encerra o aplicativo sem abrir o painel.
+O download da atualização usa timeout de 60 segundos na conexão e leitura, mostra progresso quando o tamanho é informado e salva na pasta temporária do sistema. Não há verificação de assinatura, hash ou comparação final com o tamanho anunciado. Veja o [guia técnico](docs/desenvolvimento.md#threads-e-consulta-de-releases).
 
-A versão local está em `VERSAO_ATUAL`, no arquivo `src/update.py`, atualmente `1.0.0`; isso não comprova a existência de uma release publicada. Antes de distribuir, defina o número aprovado, gere o executável e publique uma release com a tag correspondente (`vMAJOR.MINOR.PATCH`). Commits enviados ao GitHub não geram avisos de atualização por si só. Execute `python src/main.py` para usar pelo código-fonte; executáveis existentes precisam ser recompilados para incorporar a correção.
+Esta cópia contém apenas `criar_executavel.py` para empacotamento; não contém os antigos scripts de geração de launcher independente. Gerar o executável não cria um instalador. Consulte [versionamento e distribuição](docs/versionamento.md) antes de publicar uma release.
+
+## Execução e testes
+
+Na raiz que contém `src/` e `requirements.txt`:
+
+```powershell
+python -m pip install -r requirements.txt
+python src/main.py
+```
+
+Configure o `.env` e os caminhos do Chrome antes de executar. Para os testes locais, não é necessário configurar credenciais nem abrir o navegador:
+
+```powershell
+python -B -m pytest -p no:cacheprovider
+```
+
+A suíte inclui uma falha esperada para consultas simultâneas no inicializador. Veja a [matriz de testes e validação](docs/testes.md).
+
+## Limitações que afetam o resultado
+
+Não há paginação; a consulta limpa apenas a data inicial e não altera o filtro de situação. Uma falha interrompe os contratos restantes. Se a tabela de anexos não aparecer, ocorre timeout. Nomes iguais preservam o arquivo existente sem comparar conteúdo.
+
+A mensagem **Downloads concluídos** indica o fim dos contratos retornados pela consulta atual, sem relatório de completude do projeto. Confira o resultado no Conveniar antes de considerá-lo completo.

@@ -1,4 +1,4 @@
-﻿# Versionamento e padrão de commits
+# Versionamento e padrão de commits
 
 Este documento define a convenção para mensagens de commit e a orientação para versões e releases do projeto. Para os comandos do dia a dia, consulte o [guia básico de Git e GitHub](github-basico.md).
 
@@ -114,8 +114,9 @@ Quando a equipe decidir publicar uma versão:
 2. Identifique a branch e o commit aprovados para a publicação.
 3. Execute as verificações pertinentes e registre limitações conhecidas.
 4. Defina o número da versão considerando todas as alterações desde a versão anterior.
-5. Prepare notas com funcionalidades, correções e instruções de migração, se houver.
-6. Crie e envie a tag aprovada; depois publique a release no GitHub.
+5. Atualize `VERSAO_ATUAL` em `src/update.py`, gere o executável e prepare notas com funcionalidades, correções e instruções de migração.
+6. Prepare e valide separadamente o instalador. `criar_executavel.py` gera somente o aplicativo. O atualizador escolhe o primeiro asset `.exe`; evite publicar executáveis concorrentes sem definir essa seleção no código.
+7. Crie e envie a tag aprovada e publique a release com o instalador validado. Uma versão nova sem `.exe` bloqueia o painel das instalações atuais.
 
 A publicação deve ser solicitada pelo responsável, conforme o `AGENTS.md`. Os exemplos abaixo são orientações e não autorizam executar uma release.
 

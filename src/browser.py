@@ -1,4 +1,5 @@
 import shutil
+import tempfile
 import os
 from selenium import webdriver
 from selenium.common.exceptions import StaleElementReferenceException
@@ -292,199 +293,144 @@ def buscar_contratos(driver,numero_projeto):
     #contrato = {href,projeto,tipo,situacao}
     
 
-def processar_contrato(driver, item, projeto,diretorio_destino):
+def aguardar_arquivo_download(pasta, timeout=120):
+    """Espera um único arquivo estabilizar, sem downloads parciais na pasta isolada."""
+    temporarias = {".crdownload", ".tmp", ".part", ".partial", ".download", ".temp", ".!ut"}
+    limite = time.monotonic() + timeout
+    assinatura_anterior = None
+    estavel_desde = None
+    while time.monotonic() < limite:
+        arquivos = [p for p in pasta.iterdir() if p.is_file()]
+        completos = [p for p in arquivos if p.suffix.lower() not in temporarias]
+        if len(completos) > 1:
+            raise RuntimeError("Mais de um arquivo recebido para o mesmo anexo; download ambíguo.")
+        assinatura = None
+        if len(completos) == 1 and len(arquivos) == 1:
+            try:
+                estado = completos[0].stat()
+                assinatura = (completos[0], estado.st_size, estado.st_mtime_ns)
+            except FileNotFoundError:
+                pass
+        agora = time.monotonic()
+        if assinatura is None or assinatura != assinatura_anterior:
+            assinatura_anterior = assinatura
+            estavel_desde = agora
+        elif agora - estavel_desde >= 1:
+            # No Windows, o Chrome ainda pode manter o arquivo bloqueado.
+            try:
+                with completos[0].open("rb"):
+                    return completos[0]
+            except PermissionError:
+                pass
+        time.sleep(0.25)
+    raise TimeoutError(f"O arquivo do anexo não terminou de baixar em {timeout} segundos.")
 
+
+def processar_contrato(driver, item, projeto, diretorio_destino):
     contrato = item["contrato"]
-
-    # Pasta downloads
-    BASE_DIR = Path(__file__).resolve().parent.parent
-    pasta_download = diretorio_destino
-
-    # downloads/377/1250_2026
-    pasta_destino = (
-        diretorio_destino
-        / str(projeto)
-        / contrato.replace("/", "_")
-    )
-
-    pasta_destino.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    print(f"Pasta destino: {pasta_destino}")
-
-    # Guarda página anterior
+    diretorio_destino = Path(diretorio_destino).resolve()
+    pasta_destino = diretorio_destino / str(projeto) / contrato.replace("/", "_")
+    pasta_destino.mkdir(parents=True, exist_ok=True)
     pagina_anterior = driver.current_window_handle
-
-    # Abre contrato
-    link = item["link"]
-
-    driver.execute_script(
-        "arguments[0].scrollIntoView({block: 'center'});",
-        link
-    )
-    aguardar_loader_desaparecer(driver)
-    time.sleep(0.5)
-
-    driver.execute_script(
-        "arguments[0].click();",
-        link
-    )
-    
-    time.sleep(2)
-    aguardar_loader_desaparecer(driver)
-    # Vai para última janela
-    driver.switch_to.window(
-        driver.window_handles[-1]
-    )
-    aguardar_loader_desaparecer(driver)
-    # Clica em Arquivos
-    WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable(
+    janelas_antes = set(driver.window_handles)
+    janela_contrato = None
+    pasta_download = None
+    etapa = "abertura do contrato"
+    try:
+        aguardar_loader_desaparecer(driver)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", item["link"])
+        driver.execute_script("arguments[0].click();", item["link"])
+        janela_contrato = WebDriverWait(driver, 30).until(
+            lambda d: next((h for h in d.window_handles if h not in janelas_antes), False),
+            message="A janela do contrato não abriu.",
+        )
+        driver.switch_to.window(janela_contrato)
+        aguardar_loader_desaparecer(driver)
+        etapa = "abertura da aba Arquivos"
+        WebDriverWait(driver, 30).until(EC.element_to_be_clickable(
             (By.CSS_SELECTOR, 'a[href="#tabArquivo"]')
-        )
-    ).click()
-    aguardar_loader_desaparecer(driver)
-    # Tabela de anexos
-    tabela = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((
-            By.ID,
-            "ctl00_ContentPlaceHolder1_ConvenioContratoArquivosUserControl1_gvwArquivoContrato"
-        ))
-    )
-
-    # gridRow e gridAlternateRow
-    linhas = tabela.find_elements(
-        By.XPATH,
-        ".//tr[contains(@class, 'gridRow') "
-        "or contains(@class, 'gridAlternateRow')]"
-    )
-
-    downloads = []
-
-    # Guarda IDs dos botões
-    for linha in linhas:
-
-        botoes = linha.find_elements(
-            By.CSS_SELECTOR,
-            'a[title="Baixar arquivo"]'
-        )
-
-        if botoes:
-            downloads.append(
-                botoes[0].get_attribute("id")
-            )
-
-    print(f"Arquivos para baixar: {len(downloads)}")
-
-    # baixar  todos anexos 
-    for botao_id in downloads:
-
-        # Arquivos existentes ANTES deste download
-        arquivos_antes = {
-            arquivo
-            for arquivo in pasta_download.iterdir()
-            if arquivo.is_file()
-        }
-
-        # Localiza botão novamente
-        botao = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((
-                By.ID,
-                botao_id
-            ))
-        )
-
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center'});",
-            botao
-        )
+        )).click()
         aguardar_loader_desaparecer(driver)
-        driver.execute_script(
-            "arguments[0].click();",
-            botao
+        tabela_id = "ctl00_ContentPlaceHolder1_ConvenioContratoArquivosUserControl1_gvwArquivoContrato"
+        tabela = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.ID, tabela_id))
         )
-        aguardar_loader_desaparecer(driver)
-        print(f"Baixando: {botao_id}")
+        seletor = 'a[title="Baixar arquivo"]'
+        quantidade = len(tabela.find_elements(By.CSS_SELECTOR, seletor))
+        for indice in range(quantidade):
+            etapa = f"download do anexo {indice + 1} de {quantidade}"
+            aguardar_loader_desaparecer(driver)
 
-        # espera aparecer um novo arquivo dentro da pasta download
+            def localizar_botao(navegador):
+                try:
+                    tabela_atual = navegador.find_element(By.ID, tabela_id)
+                    botoes = tabela_atual.find_elements(By.CSS_SELECTOR, seletor)
+                    if len(botoes) != quantidade:
+                        return False
+                    botao = botoes[indice]
+                    return botao if botao.is_displayed() and botao.is_enabled() else False
+                except StaleElementReferenceException:
+                    return False
 
-        arquivo_baixado = None
-
-        for _ in range(120):
-
-            arquivos_agora = {
-                arquivo
-                for arquivo in pasta_download.iterdir()
-                if arquivo.is_file()
-            }
-
-            novos = arquivos_agora - arquivos_antes
-            extensoes_temporarias = {
-                    ".crdownload",  # Chrome
-                    ".tmp",         # temporário
-                    ".part",        # Firefox/outros
-                    ".partial",     # download parcial
-                    ".download",    # alguns gerenciadores
-                    ".temp",
-                    ".!ut",         # uTorrent
-                }
-            # Ignora .crdownload
-            completos = [
-                arquivo
-                for arquivo in novos
-                if arquivo.suffix.lower() not in extensoes_temporarias
-            ]
-
-            if completos:
-                arquivo_baixado = completos[0]
-                break
-
-            time.sleep(1)
-
-        # Se não apareceu, para a automação
-        if arquivo_baixado is None:
-            raise TimeoutError(
-                f"Download não concluído: {botao_id}"
-            )
-
-       # move para pasta de destino 
-        destino = pasta_destino / arquivo_baixado.name
-
-        # Evita sobrescrever arquivo existente
-        if destino.exists():
-            print(f"Arquivo já existe: {destino.name}")
-
-            # Remove o download duplicado
-            arquivo_baixado.unlink()
-
-        else:
-            shutil.move(
-                str(arquivo_baixado),
-                str(destino)
-            )
-
-            print(f"Movido: {destino}")
-
-        # Somente AGORA vai para o próximo
-        print("Download confirmado!")
-        print("-" * 50)
-
-    # Fecha contrato
-    driver.close()
-    
-    # Volta para página anterior
-    driver.switch_to.window(pagina_anterior)
-
-    print("Retornado para página anterior!")
+            botao = WebDriverWait(driver, 30).until(localizar_botao)
+            # Uma pasta exclusiva vincula o arquivo ao clique, inclusive com nomes repetidos.
+            pasta_download = Path(tempfile.mkdtemp(prefix=".anexo-", dir=pasta_destino))
+            driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
+                "behavior": "allow", "downloadPath": str(pasta_download),
+            })
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", botao)
+            botao.click()
+            aguardar_loader_desaparecer(driver)
+            arquivo = aguardar_arquivo_download(pasta_download)
+            aguardar_loader_desaparecer(driver)
+            destino = pasta_destino / arquivo.name
+            if destino.exists():
+                print(f"Arquivo já existe: {destino.name}")
+                arquivo.unlink()
+            else:
+                shutil.move(str(arquivo), str(destino))
+                print(f"Movido: {destino}")
+            pasta_download.rmdir()
+            pasta_download = None
+    except Exception as erro:
+        # Não inclui a exceção do navegador, que pode conter dados da sessão.
+        print(f"Falha no contrato {contrato}: {etapa}.")
+        raise RuntimeError(f"Falha no contrato {contrato}: {etapa}.") from erro
+    finally:
+        # Mantém arquivos parciais em caso de falha para não descartar anexos.
+        try:
+            driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
+                "behavior": "allow", "downloadPath": str(diretorio_destino),
+            })
+        finally:
+            try:
+                if janela_contrato is not None and janela_contrato in driver.window_handles:
+                    driver.switch_to.window(janela_contrato)
+                    driver.close()
+            finally:
+                driver.switch_to.window(pagina_anterior)
 
 
-    
 def aguardar_loader_desaparecer(driver, timeout=30):
-    WebDriverWait(driver, timeout).until(
-        EC.invisibility_of_element_located(
-            (By.ID, "imgLoad")
-        )
+    """Espera documento pronto e loader ausente continuamente por um segundo."""
+    livre_desde = None
+
+    def pagina_livre(navegador):
+        nonlocal livre_desde
+        try:
+            pronta = navegador.execute_script("return document.readyState === 'complete';")
+            loaders = navegador.find_elements(By.ID, "imgLoad")
+            livre = pronta and not any(loader.is_displayed() for loader in loaders)
+        except StaleElementReferenceException:
+            livre = False
+        if not livre:
+            livre_desde = None
+            return False
+        agora = time.monotonic()
+        if livre_desde is None:
+            livre_desde = agora
+        return agora - livre_desde >= 1
+
+    WebDriverWait(driver, timeout, poll_frequency=0.2).until(
+        pagina_livre, message="A página não terminou de carregar ou o loader continua visível.",
     )
-    

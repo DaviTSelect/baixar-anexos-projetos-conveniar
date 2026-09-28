@@ -31,7 +31,7 @@ class InterfaceTests(unittest.TestCase):
         self.pasta = TemporaryDirectory()
         self.addCleanup(self.pasta.cleanup)
         self.ui.diretorio = Path(self.pasta.name)
-        for nome in ('app', 'label_status', 'label_atualizacao', 'botao_atualizacao',
+        for nome in ('app', 'label_status',
                      'botao_conferir_N_projeto', 'campo_N_projeto'):
             setattr(self.ui, nome, Mock())
         self.driver = self.modulo.realizar_login.return_value
@@ -86,6 +86,29 @@ class InterfaceTests(unittest.TestCase):
         self.ui.worker.is_alive.return_value = False
         self.ui.consumir_eventos()
         self.ui.app.destroy.assert_called_once()
+
+    def test_sem_contratos_informa_resultado_e_fecha_navegador(self):
+        self.modulo.buscar_contratos.return_value = []
+        self.ui.executar_automacao(123, self.ui.diretorio)
+        with patch.object(self.modulo.messagebox, 'showinfo') as aviso:
+            self.ui.consumir_eventos()
+        self.modulo.processar_contrato.assert_not_called()
+        self.driver.quit.assert_called_once()
+        self.assertIn('Nenhum contrato encontrado', str(aviso.call_args))
+
+    def test_falha_em_contrato_interrompe_restantes_e_nao_anuncia_sucesso(self):
+        # Caracteriza a limitação atual: não há continuação automática após erro.
+        self.modulo.buscar_contratos.return_value = [
+            {'contrato': '1/2026'}, {'contrato': '2/2026'}]
+        self.modulo.processar_contrato.side_effect = RuntimeError('falha fictícia')
+        self.ui.executar_automacao(123, self.ui.diretorio)
+        with patch.object(self.modulo.messagebox, 'showerror') as erro, \
+                patch.object(self.modulo.messagebox, 'showinfo') as sucesso:
+            self.ui.consumir_eventos()
+        self.modulo.processar_contrato.assert_called_once()
+        self.driver.quit.assert_called_once()
+        self.assertIn('contrato 1/2026', str(erro.call_args))
+        sucesso.assert_not_called()
 
     def test_falha_no_quit_nao_anuncia_sucesso(self):
         self.driver.quit.side_effect = RuntimeError('falha')
