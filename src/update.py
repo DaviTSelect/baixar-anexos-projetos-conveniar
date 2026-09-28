@@ -3,13 +3,16 @@
 import json
 import os
 import re
+import ssl
 import tempfile
+
+import certifi
 
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-VERSAO_ATUAL = "1.1.1"
+VERSAO_ATUAL = "1.1.2"
 
 REPOSITORIO = "DaviTSelect/baixar-anexos-projetos-conveniar"
 
@@ -65,6 +68,13 @@ def _requisicao(
     )
 
 
+def _contexto_ssl():
+    """Soma as CAs distribuídas com o aplicativo às confiáveis do sistema."""
+    contexto = ssl.create_default_context()
+    contexto.load_verify_locations(cafile=certifi.where())
+    return contexto
+
+
 def verificar_atualizacoes():
     """
     Verifica a última release estável no GitHub.
@@ -84,6 +94,7 @@ def verificar_atualizacoes():
         with urlopen(
             requisicao,
             timeout=15,
+            context=_contexto_ssl(),
         ) as resposta:
             release = json.load(resposta)
 
@@ -267,6 +278,7 @@ def baixar_atualizacao(
         with urlopen(
             requisicao,
             timeout=60,
+            context=_contexto_ssl(),
         ) as resposta:
 
             total = resposta.headers.get(

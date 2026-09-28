@@ -10,7 +10,7 @@ Com seu ambiente virtual ativo e Python com suporte a Tkinter, instale a bibliot
 python -m pip install customtkinter
 ```
 
-Atualmente essa dependência ainda não está em `requirements.txt`. Salve o exemplo completo abaixo em `exemplo_interface.py`, na raiz, e execute:
+Essa dependência já está declarada em `requirements.txt`. Salve o exemplo completo abaixo em `exemplo_interface.py`, na raiz, e execute:
 
 ```powershell
 python exemplo_interface.py
@@ -133,9 +133,9 @@ self.progresso.set(0.5)  # Exemplo visual: metade concluída
 
 Em um método, use `self.detalhes.get()` para obter `1` ou `0` e `self.visualizacao.get()` para ler a escolha. Essas opções são didáticas e não mudam as regras de consulta do projeto.
 
-## Como conectar com a automação depois
+## Como a interface se conecta à automação
 
-A integração deve chamar `realizar_login()` sem argumentos e passar o projeto para `buscar_contratos(driver, numero_projeto)`. Não acrescente campos de usuário ou senha. O fluxo real ainda está bloqueado pelo loader e pelas demais limitações do [guia técnico](desenvolvimento.md).
+A integração deve chamar `realizar_login()` sem argumentos e passar o projeto para `buscar_contratos(driver, numero_projeto)`. Não acrescente campos de usuário ou senha. O painel atual já faz essa integração em uma thread e comunica estados por fila. O seletor do loader e o fluxo completo precisam de validação no Conveniar; veja as limitações do [guia técnico](desenvolvimento.md).
 
 Selenium e downloads podem demorar. Colocá-los diretamente na função do botão bloqueia o atendimento dos eventos da janela. Ao implementar essa integração, execute o trabalho demorado em uma thread e comunique os resultados por uma fila (`queue.Queue`). Na thread principal, consulte a fila periodicamente com `self.app.after(...)` e atualize os componentes ali. Não leia ou altere widgets na thread de trabalho. Essa separação segue as restrições do [modelo de execução do Tkinter](https://docs.python.org/3/library/tkinter.html#threading-model).
 

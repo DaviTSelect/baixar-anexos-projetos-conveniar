@@ -1,4 +1,4 @@
-﻿# Desenvolvimento
+# Desenvolvimento
 
 Este guia descreve o código existente e separa as regras pretendidas das funcionalidades ainda pendentes. Consulte o [README](../README.md) para a configuração e a estrutura do projeto.
 
@@ -8,12 +8,13 @@ Para apoio ao estagiário, consulte o [guia básico de Git e GitHub](github-basi
 
 | Arquivo | Responsabilidade atual |
 | --- | --- |
-| `src/main.py` | Abre o inicializador e, ao continuar, instancia `InterfaceAutomacao`. |
-| `src/launcher.py` | Oferece consultar releases ou continuar na versão atual, antes do painel. |
+| `src/main.py` | Abre o inicializador e só instancia `InterfaceAutomacao` quando a versão atual é liberada. |
+| `src/launcher.py` | Coordena consulta, download e execução obrigatórios da atualização antes do painel. |
+| `src/update.py` | Consulta a release pública, compara versões e baixa o primeiro `.exe`. |
 | `src/interface.py` | Cria a janela CustomTkinter, recebe o projeto e a pasta, inicia a automação e mostra o contrato em processamento. |
 | `src/browser.py` | Contém as rotinas de login, consulta e download, além da espera do loader por invisibilidade de `imgLoad`. |
 | `src/config.py` | Lê as variáveis de ambiente e define os caminhos da raiz e dos downloads. |
-| `tests/test_regras.py` | Define testes de situação e normalização, mas importa um módulo ausente. |
+| `tests/test_regras.py` | Exercita a filtragem de `buscar_contratos()` com navegador simulado. |
 
 ## Integração do painel e autenticação
 
@@ -50,9 +51,9 @@ Cada resultado contém `contrato`, `projeto`, `status` e `link`. O link é um el
 
 ## Loader e paginação
 
-`aguardar_loader_desaparecer(driver, timeout=30)` usa `WebDriverWait` e a invisibilidade do elemento `imgLoad`. A implementação já existia antes da separação das threads; o seletor e seu comportamento ainda precisam de validação real no Conveniar.
+`aguardar_loader_desaparecer(driver, timeout=30)` usa `WebDriverWait`, verifica o documento pronto e exige que os elementos `imgLoad` permaneçam invisíveis ou ausentes por um segundo contínuo. Se o loader aparecer nesse intervalo, a contagem reinicia. O seletor e seu comportamento ainda precisam de validação real no Conveniar; carregamentos que comecem após esse intervalo não são previstos pela espera.
 
-O requisito é aguardar uma condição real da página com timeout após operações que provoquem carregamento. O código também contém esperas fixas com `time.sleep()`.
+O requisito é aguardar uma condição real da página com timeout após operações que provoquem carregamento. No processamento dos anexos, a abertura da janela e a espera do loader usam condições verificadas; `time.sleep()` é usado somente como intervalo de consulta do arquivo em disco.
 
 A paginação ainda não foi implementada. As chamadas para rolar a página não constituem navegação entre páginas de resultados.
 
@@ -68,14 +69,16 @@ Quando implementada, a paginação deverá:
 A sequência presente em `processar_contrato(driver, item, projeto, diretorio_destino)` é:
 
 1. Criar `<diretorio_destino>/<projeto>/<contrato>/`, substituindo `/` por `_` no contrato.
-2. Guardar a janela atual, clicar no link e selecionar a última janela do navegador.
-3. Abrir a aba `Arquivos` e localizar a tabela de anexos.
-4. Coletar o primeiro botão `Baixar arquivo` de cada linha que tenha esse botão.
-5. Acionar cada download e procurar um novo arquivo na pasta selecionada, ignorando a extensão `.crdownload`.
-6. Mover o arquivo para a pasta do contrato, se o nome ainda não existir no destino.
-7. Fechar a janela do contrato e retornar à anterior.
+2. Guardar as janelas existentes, clicar no link e aguardar uma nova janela por até 30 segundos.
+3. Aguardar o loader desaparecer, abrir a aba `Arquivos` e localizar a tabela de anexos.
+4. Contar os botões `Baixar arquivo` e relocalizá-los a cada download, evitando referências antigas após atualizações da tabela. A ordem dos anexos deve permanecer a mesma.
+5. Configurar via CDP uma pasta exclusiva `.anexo-*` dentro da pasta do contrato para cada clique e aguardar o loader e o arquivo. Arquivos da pasta geral não são candidatos.
+6. Mover o arquivo concluído para a pasta do contrato, se o nome ainda não existir, e remover a pasta temporária vazia antes do próximo anexo.
+7. Restaurar a pasta de downloads, fechar a janela do contrato e retornar à anterior, inclusive em falhas. Arquivos parciais ficam preservados na pasta `.anexo-*` para inspeção.
 
-A espera pelo arquivo usa até 120 verificações, com intervalos de um segundo. Se nenhum arquivo for identificado, a rotina lança `TimeoutError`.
+A espera pelo arquivo tem timeout de 120 segundos, com consultas a cada 250 ms. Exige um único arquivo, sem parciais, com tamanho e data de modificação estáveis por um segundo e disponível para leitura. Mais de um arquivo completo causa erro de ambiguidade. O timeout interrompe o contrato e a mensagem identifica a etapa e o índice do anexo. A configuração do Chrome via CDP e o caso real do projeto 328 ainda precisam ser validados no Conveniar.
+
+Os testes de regressão em `tests/test_downloads.py` simulam vários anexos, colisão de nomes, arquivos alheios na pasta geral, download parcial, crescimento do arquivo, timeout, loader tardio e restauração após falhas. Execute `python -B -m pytest tests/test_downloads.py tests/test_carregamento.py tests/test_interface_threads.py -p no:cacheprovider`.
 
 Se o nome já existir no destino, o arquivo existente é mantido e o novo download é excluído. Não há comparação de conteúdo nem renomeação com sufixos. Arquivos de mesmo nome podem ter conteúdos diferentes; essa limitação deve ser considerada ao avaliar os resultados.
 
@@ -89,27 +92,23 @@ Além do loader e da paginação:
 - O navegador depende dos caminhos fixos para Windows descritos no README.
 - Uma exceção interrompe o processamento dos demais contratos. A thread tenta encerrar toda a sessão do navegador no `finally`.
 
-Esses pontos são registros de documentação, não correções implementadas.
+O login ainda não verifica um sinal específico de autenticação após clicar em entrar. A mensagem final não contém contagem ou relatório de anexos pendentes. Uma indisponibilidade do GitHub bloqueia o painel, mesmo se o Conveniar estiver acessível.
+
+Esses pontos são limitações registradas, não correções implementadas.
 
 ## Testes existentes
 
-`pytest.ini` configura a descoberta de `test_*.py` em `tests/` e a saída reduzida com `-q`.
-
-`tests/test_envio_github.py` valida as versões Python (`ferramentas/github/enviar.py`) e PowerShell do script de envio usando repositórios temporários e um remoto local, sem acessar o GitHub. Requer Git; os cenários PowerShell são ignorados quando ele não está disponível. O atalho `enviar.cmd` executa a versão Python, que usa somente a biblioteca padrão. Cobre commit e push da branch atual, reenvio sem novo commit, cancelamento, mensagem vazia, bloqueio de `.env` rastreado, ausência de branch ativa e preservação do commit após push rejeitado. Execute separadamente da suíte de regras:
+A suíte e a matriz de cobertura estão em [Testes e validação de QA](testes.md). Execute na raiz:
 
 ```powershell
-python -B -m pytest tests/test_envio_github.py -p no:cacheprovider
+python -B -m pytest -p no:cacheprovider
 ```
 
-`tests/test_regras.py` define estes cenários:
+`test_regras.py` carrega `browser.py` com configuração fictícia e exercita `buscar_contratos()`: situações válidas, espaços nas extremidades, projeto correto, link, linhas incompletas, ordem e resultado vazio. Não depende de um módulo `src.contratos`.
 
-- Aceitar `ATIVO` e `ENCERRADO`.
-- Rejeitar `CANCELADO` e `SUSPENSO`.
-- Normalizar espaços nas extremidades e diferenças entre maiúsculas e minúsculas.
+Os testes de atualização usam o retorno atual de três valores: mensagem, status textual e URL. Os testes do inicializador simulam janelas, rede e execução do instalador. QA-01 permanece como `xfail(strict=True)`: a consulta não impede chamadas simultâneas. Uma correção futura fará esse teste sinalizar XPASS até retirar a marcação.
 
-Porém, o arquivo importa `normalizar_situacao` e `situacao_valida` de `src.contratos`, que não existe no código-fonte atual. Essa dependência impede a coleta dos testes em um ambiente limpo. Os testes não validam diretamente a filtragem presente em `browser.py`.
-
-Para futuras alterações de código autorizadas, priorizar testes de regras críticas: seleção dos contratos, colisões de nomes, paginação e timeouts. Não buscar cobertura artificial nem apresentar cenários planejados como testes já existentes.
+Os testes de envio usam repositórios e remotos locais temporários, sem publicar no GitHub. Requerem Git; os cenários PowerShell são ignorados se ele estiver ausente.
 
 ## Orientações de manutenção
 
@@ -169,22 +168,28 @@ O empacotamento inclui explicitamente os módulos `selenium.webdriver.chrome.web
 
 ## Threads e consulta de releases
 
-`gerar_launcher.py` é o gerador do launcher independente. Ele copia `src/launcher.py` para `launcher.py` na raiz, preservando uma forma reproduzível de gerar o arquivo após futuras alterações no fluxo de atualização. O launcher consulta releases e abre a página de download manual; não instala arquivos nem substitui o executável automaticamente.
+O fluxo é obrigatório. `src/main.py` chama `Inicializador.iniciar()`, que agenda a consulta automática. O retorno só libera o painel após o resultado `atualizado`. Fechamento manual ou execução do instalador não liberam a versão antiga.
 
-`criar_executavel_launcher.py` empacota `src/launcher.py` com PyInstaller em um executável separado, `dist/Launcher - Anexos - Contratos por Projeto.exe`. O arquivo usa janela sem console, o ícone do projeto e os módulos de `src` necessários para abrir o fluxo inicial e consultar atualizações. Os arquivos intermediários ficam em `build/pyinstaller-launcher/`.
+`verificar_atualizacoes()` retorna `(mensagem, status, url_download)`:
 
-`src/update.py` consulta a API de última release do GitHub usando a biblioteca padrão, sem `requests`. `src/main.py` abre primeiro `Inicializador`, de `src/launcher.py`. O botão de verificação inicia uma thread daemon separada, impede consultas simultâneas e permite tentar novamente após o resultado. O worker retorna apenas texto e um indicador para uma fila; somente a thread principal acessa os widgets.
+| Status | Ação do inicializador |
+| --- | --- |
+| `atualizado` | Agenda abertura do painel. |
+| `disponivel` | Baixa automaticamente e tenta executar o arquivo. |
+| `erro` | Permite tentar novamente; mantém o painel bloqueado. |
 
-Continuar fecha o inicializador e abre o painel, inclusive com uma consulta em andamento. Fechar pelo X encerra sem abrir o painel. O callback de consumo da fila é cancelado antes de destruir a janela; resultados tardios não acessam widgets. A consulta não precisa terminar para continuar ou sair. Quando disponível, a atualização é obtida manualmente pelo botão que abre a página da release; abrir essa página mantém a opção de continuar na versão instalada.
+A comparação usa tuplas numéricas `MAJOR.MINOR.PATCH`, com prefixo `v` opcional. Rascunhos, pré-releases, JSON inválido, falhas HTTP ou de rede e versões novas sem asset `.exe` resultam em erro. A consulta usa timeout de 15 segundos. A versão local é `VERSAO_ATUAL` em `src/update.py`, atualmente `1.1.2`.
 
-A comparação usa tuplas numéricas de `MAJOR.MINOR.PATCH`, com prefixo `v` opcional, e ignora drafts e prereleases. Formatos inválidos, JSON inválido, erros HTTP e de rede resultam em aviso não bloqueante. HTTP 404 pode significar ausência de release ou repositório não acessível; não se afirma que o aplicativo esteja atualizado nesses casos. A consulta é pública, sem token, e não instala nem substitui o executável.
+Consulta e download usam threads daemon e publicam resultados em uma fila. A thread principal consome os eventos a cada 100 ms e atualiza os widgets. O código impede novos downloads durante um download ativo, mas não impede consultas simultâneas (QA-01).
 
-`VERSAO_ATUAL = "1.0.0"` é o valor local configurado, sem comprovar publicação. Atualize essa constante para a versão aprovada antes de gerar o executável e publicar a release correspondente. O módulo é importado pelo inicializador e incluído pelo empacotador. Recompile para usar estas alterações no `.exe` existente.
+O download usa `urlopen` com timeout de 60 segundos, lê blocos de até 1 MiB e salva na pasta temporária do sistema. Remove o arquivo quando uma exceção interrompe a operação e rejeita arquivo vazio. Não verifica hash, assinatura ou igualdade com `Content-Length`. O timeout de rede não é um limite total da atualização.
 
-Verificação isolada, sem credenciais, navegador real ou rede:
+O primeiro asset terminado em `.exe` é tratado como instalador, sem seleção por nome específico ou arquitetura. Após baixar, `os.startfile()` tenta executá-lo no Windows e o aplicativo fecha. Isso não confirma instalação bem-sucedida. O instalador precisa realizar a instalação e eventual reabertura; `criar_executavel.py` gera somente o aplicativo.
 
-```powershell
-python -B -m pytest tests/test_launcher.py tests/test_interface_threads.py tests/test_update.py tests/test_carregamento.py -p no:cacheprovider
-```
+Durante o download obrigatório, fechar mostra um aviso e mantém a janela. Fora dessa etapa, encerra sem abrir o painel; resultados tardios deixam de ser consumidos. Falhas permitem tentar novamente. Mensagens de exceção do atualizador podem aparecer na interface; não há sanitização geral.
 
-Os testes verificam que uma operação bloqueada no worker deixa a thread principal livre, não acessa widgets, impede execução duplicada, encerra o navegador em falhas e respeita o fechamento cooperativo. Também cobrem comparação numérica de versões, respostas inválidas, ausência de release, limite HTTP e timeout. Os testes do inicializador cobrem continuar sem consulta ou durante a espera de rede, fechar sem abrir o painel, falhas de consulta e abertura manual da página da release. Isso não substitui validação da janela e dos downloads reais no Conveniar.
+Não existem nesta cópia `gerar_launcher.py`, `criar_executavel_launcher.py` nem launcher independente na raiz. Use `python src/main.py` ou o executável principal.
+
+As requisições usam um contexto TLS que preserva as CAs do sistema e acrescenta as do `certifi`. A validação de certificado e nome do servidor permanece habilitada. O empacotamento inclui os dados do pacote. Veja [Erro de certificado](erro-certificado.md).
+
+Os testes locais não confirmam acesso à rede afetada, instalação real ou seletores do Conveniar. Consulte [testes e validação](testes.md) antes de distribuir.
