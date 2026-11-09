@@ -91,6 +91,6 @@ del "%NOTES_FILE%" >nul 2>&1
 echo.
 echo ============================================
 echo  Release %TAG% publicada com sucesso!
-echo  https://github.com/DaviTSelect/baixar-anexos-conveniar/releases/tag/%TAG%
+echo  https://github.com/DaviTSelect/baixar-anexos-projetos-conveniar/releases/tag/%TAG%
 echo ============================================
 pause

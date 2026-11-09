@@ -4,6 +4,7 @@ import json
 import os
 import re
 import ssl
+import sys
 import tempfile
 
 import certifi
@@ -11,10 +12,15 @@ import certifi
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-
-VERSAO_ATUAL = "1.1.2"
-
-REPOSITORIO = "DaviTSelect/baixar-anexos-projetos-conveniar"
+# Lê VERSION e REPOSITORY de version.py (na raiz do projeto)
+try:
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    from version import VERSION as VERSAO_ATUAL, REPOSITORY as REPOSITORIO
+except ImportError:
+    VERSAO_ATUAL = "1.1.2"
+    REPOSITORIO = "DaviTSelect/baixar-anexos-projetos-conveniar"
 
 RELEASES_URL = (
     f"https://github.com/{REPOSITORIO}/releases/latest"
