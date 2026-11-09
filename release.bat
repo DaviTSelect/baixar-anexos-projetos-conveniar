@@ -39,7 +39,7 @@ if %ERRORLEVEL% neq 0 ( echo ERRO ao instalar dependencias & pause & exit /b 1 )
 echo [2/5] Executando testes...
 set PYTHONPATH=src
 %PY% -m pytest tests -q
-if %ERRORLEVEL% neq 0 ( echo ERRO nos testes & pause & exit /b 1 )
+if errorlevel 1 ( echo ERRO nos testes & pause & exit /b 1 )
 
 echo [3/5] Compilando executavel...
 if exist dist rmdir /s /q dist
@@ -79,7 +79,8 @@ gh release create %TAG% ^
     "dist\BaixarAnexosConveniar.exe" ^
     "dist\BaixarAnexosConveniar.exe.sha256" ^
     --title "Baixar Anexos Conveniar %TAG%" ^
-    --notes-file "%NOTES_FILE%"
+    --notes-file "%NOTES_FILE%" ^
+    --repo DaviTSelect/baixar-anexos-projetos-conveniar
 
 if %ERRORLEVEL% neq 0 (
     echo ERRO ao criar release no GitHub
