@@ -1,0 +1,59 @@
+name: Release (backup)
+
+# Compila e anexa o EXE apenas se a release foi publicada sem ele.
+# O fluxo principal e o release.bat rodado localmente.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Verificar se o EXE ja esta na release
+        id: check
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --json assets -q '.assets[].name' 2>$null
+          if ($assets -match "BaixarAnexosConveniar.exe") {
+            echo "has_exe=true" >> $env:GITHUB_OUTPUT
+            Write-Host "EXE ja esta na release, nada a fazer."
+          } else {
+            echo "has_exe=false" >> $env:GITHUB_OUTPUT
+            Write-Host "EXE nao encontrado, compilando..."
+          }
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.has_exe == 'false'
+
+      - name: Set up Python
+        if: steps.check.outputs.has_exe == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias e compilar
+        if: steps.check.outputs.has_exe == 'false'
+        env:
+          PYTHONPATH: src
+        run: |
+          pip install -r requirements.txt -q
+          pip install -r requirements-build.txt -q
+          pyinstaller main.spec --noconfirm
+
+      - name: Calcular SHA-256 e anexar
+        if: steps.check.outputs.has_exe == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $hash = (Get-FileHash dist\BaixarAnexosConveniar.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  BaixarAnexosConveniar.exe" | Out-File -Encoding utf8 dist\BaixarAnexosConveniar.exe.sha256
+          gh release upload $env:GITHUB_REF_NAME dist\BaixarAnexosConveniar.exe dist\BaixarAnexosConveniar.exe.sha256 --repo $env:GITHUB_REPOSITORY
+          Write-Host "EXE anexado com sucesso."
