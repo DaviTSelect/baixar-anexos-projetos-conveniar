@@ -419,14 +419,20 @@ class ToggleRow(QFrame):
         super().__init__()
         self.setObjectName('togRow')
         self.setStyleSheet('#togRow{background:transparent;border:none;}')
-        self.setMinimumHeight(100)
+        self.setMinimumHeight(118)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setContentsMargins(16, 20, 16, 20)
         outer.setSpacing(12)
 
-        self._icon_holder, ih = _porta_icone(False)
-        ih.addWidget(Icon('monitor'))
+        # Ícone do monitor maior que o padrão
+        self._icon_holder = QFrame()
+        self._icon_holder.setFixedSize(50, 50)
+        self._icon_holder.setStyleSheet(
+            f'background:{_FUNDO_ICONE};border-radius:14px;')
+        ih = QHBoxLayout(self._icon_holder)
+        ih.setContentsMargins(0, 0, 0, 0)
+        ih.addWidget(Icon('monitor', size=30))
         outer.addWidget(self._icon_holder, 0, Qt.AlignTop)
 
         content = QVBoxLayout()
@@ -448,20 +454,17 @@ class ToggleRow(QFrame):
         content.addWidget(_rotulo(title, 12, BG, QFont.DemiBold))
         content.addSpacing(4)
         content.addWidget(_rotulo(description, 10, '#6d7780', wrap=True))
-        content.addStretch()
-        outer.addLayout(content, 1)
+        content.addSpacing(8)
 
+        # Checkbox inline no conteúdo, alinhado com as demais etapas
         self._toggle = QCheckBox(label)
         self._toggle.setFont(QFont('Segoe UI', 10))
         self._toggle.setCursor(Qt.PointingHandCursor)
-        self._toggle.setStyleSheet(
-            'QCheckBox{color:#344a5b;spacing:8px;}'
-            'QCheckBox::indicator{width:18px;height:18px;border:2px solid #c0c8cc;'
-            'border-radius:4px;background:#ffffff;}'
-            'QCheckBox::indicator:checked{background:#317458;border-color:#317458;}'
-            'QCheckBox::indicator:hover{border-color:#8ea8b4;}')
+        self._toggle.setStyleSheet('QCheckBox { color: #344a5b; spacing: 6px; }')
         self._toggle.stateChanged.connect(lambda _s: changed_cb(self._toggle.isChecked()))
-        outer.addWidget(self._toggle, 0, Qt.AlignVCenter)
+        content.addWidget(self._toggle)
+        content.addStretch()
+        outer.addLayout(content, 1)
 
     def marcado(self) -> bool:
         return self._toggle.isChecked()
