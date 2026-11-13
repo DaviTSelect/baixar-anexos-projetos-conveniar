@@ -661,16 +661,6 @@ class InterfaceAutomacao(QWidget):
             self._escolher_pasta,
         )
         lay.addWidget(self._row_pasta)
-        lay.addWidget(_divisor('#e3e5e2'))
-
-        # Etapa 03 — ocultar janela do Chrome (opcional)
-        self._row_headless = ToggleRow(
-            '03', 'Modo silencioso',
-            'Oculta a janela do Chrome durante a execução.',
-            'Ocultar Chrome',
-            self._ao_mudar_headless,
-        )
-        lay.addWidget(self._row_headless)
 
     def _montar_rodape_cartao(self, lay):
         rodape = QFrame()
@@ -690,6 +680,13 @@ class InterfaceAutomacao(QWidget):
         self.label_status.setWordWrap(True)
         textos.addWidget(self._status_titulo)
         textos.addWidget(self.label_status)
+        self._chk_headless = QCheckBox('Ocultar Chrome')
+        self._chk_headless.setFont(QFont('Segoe UI', 9))
+        self._chk_headless.setCursor(Qt.PointingHandCursor)
+        self._chk_headless.setStyleSheet('QCheckBox { color: #7a838a; spacing: 5px; }')
+        self._chk_headless.stateChanged.connect(
+            lambda _s: self._ao_mudar_headless(self._chk_headless.isChecked()))
+        textos.addWidget(self._chk_headless)
         rl.addLayout(textos, 1)
 
         # botao_conferir_N_projeto mantido para compatibilidade com testes
@@ -798,8 +795,8 @@ class InterfaceAutomacao(QWidget):
         self.campo_N_projeto.configure(state='disabled')
         if hasattr(self, '_row_pasta'):
             self._row_pasta.configure(state='disabled')
-        if hasattr(self, '_row_headless'):
-            self._row_headless.configure(state='disabled')
+        if hasattr(self, '_chk_headless'):
+            self._chk_headless.setEnabled(False)
         if hasattr(self, '_status_titulo'):
             self._status_titulo.setText('Processamento em andamento')
         self.worker = Thread(
@@ -908,8 +905,8 @@ class InterfaceAutomacao(QWidget):
                         self.campo_N_projeto.configure(state='normal')
                         if hasattr(self, '_row_pasta'):
                             self._row_pasta.configure(state='normal')
-                        if hasattr(self, '_row_headless'):
-                            self._row_headless.configure(state='normal')
+                        if hasattr(self, '_chk_headless'):
+                            self._chk_headless.setEnabled(True)
                         if hasattr(self, '_status_titulo'):
                             self._status_titulo.setText('Concluído' if not erro else 'Falha')
                         self.atualizar_status(erro or texto)
