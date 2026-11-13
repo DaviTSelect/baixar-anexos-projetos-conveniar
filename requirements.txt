@@ -2,5 +2,5 @@ python-dotenv
 certifi
 pytest
 selenium
-customtkinter
+PySide6
 openpyxl
