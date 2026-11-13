@@ -11,11 +11,38 @@ from customtkinter import (
     CTkFont
 )
 
+from datetime import datetime
 from pathlib import Path
 import sys
+import openpyxl
 from browser import realizar_login
 from browser import buscar_contratos
 from browser import processar_contrato
+from config import BASE_DIR
+
+
+def gerar_relatorio(numero_projeto, resultados):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Relatorio"
+    ws.append(["Projeto", "Contrato", "Situacao", "Resultado", "Anexos Baixados", "Detalhe"])
+    for r in resultados:
+        ws.append([
+            r["projeto"],
+            r["contrato"],
+            r["situacao"],
+            r["resultado"],
+            r["baixados"],
+            r["detalhe"],
+        ])
+    for col in ws.columns:
+        largura = max(len(str(cell.value or "")) for cell in col)
+        ws.column_dimensions[col[0].column_letter].width = min(largura + 2, 60)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    caminho = BASE_DIR / f"relatorio_{numero_projeto}_{timestamp}.xlsx"
+    wb.save(str(caminho))
+    print(f"Relatório gerado: {caminho}")
+    return caminho
 
 
 
@@ -176,6 +203,7 @@ class InterfaceAutomacao:
         etapa = "login"
         erro = None
         texto = "Processamento interrompido."
+        resultados_contratos = []
         try:
             if self.cancelar.is_set():
                 return
@@ -196,8 +224,47 @@ class InterfaceAutomacao:
                     return
                 etapa = f"contrato {item['contrato']}"
                 self.eventos.put(("status", f"Baixando anexos do contrato {item['contrato']}..."))
-                processar_contrato(driver, item, numero_projeto, diretorio)
-            texto = "Downloads concluídos." if resultados else "Nenhum contrato encontrado."
+                try:
+                    r = processar_contrato(driver, item, numero_projeto, diretorio)
+                    if r.get("sem_tabela"):
+                        resultado_texto = "Sem anexos"
+                        detalhe = "Tabela de arquivos não encontrada"
+                    elif r["baixados"] == 0:
+                        resultado_texto = "Sem anexos"
+                        detalhe = ""
+                    else:
+                        resultado_texto = "Sucesso"
+                        detalhe = ""
+                    resultados_contratos.append({
+                        "projeto": numero_projeto,
+                        "contrato": item["contrato"],
+                        "situacao": item["status"],
+                        "resultado": resultado_texto,
+                        "baixados": r["baixados"],
+                        "detalhe": detalhe,
+                    })
+                except Exception as e_contrato:
+                    resultados_contratos.append({
+                        "projeto": numero_projeto,
+                        "contrato": item["contrato"],
+                        "situacao": item["status"],
+                        "resultado": "Erro",
+                        "baixados": 0,
+                        "detalhe": str(e_contrato),
+                    })
+            if not resultados:
+                texto = "Nenhum contrato encontrado."
+            else:
+                erros = sum(1 for r in resultados_contratos if r["resultado"] == "Erro")
+                texto = "Downloads concluídos."
+                if erros:
+                    texto += f" ({erros} contrato(s) com erro)"
+                try:
+                    etapa = "geração do relatório"
+                    caminho = gerar_relatorio(numero_projeto, resultados_contratos)
+                    texto += f"\nRelatório: {caminho.name}"
+                except Exception:
+                    texto += "\nFalha ao gerar relatório."
         except Exception:
             erro = f"Falha no processamento: {etapa}."
         finally:

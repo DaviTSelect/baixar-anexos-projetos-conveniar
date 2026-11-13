@@ -11,7 +11,7 @@ def main():
         raise SystemExit("Execute este script no Windows para gerar o .exe.")
 
     raiz = Path(__file__).resolve().parent
-    for modulo in ("PyInstaller", "customtkinter", "selenium", "dotenv", "certifi"):
+    for modulo in ("PyInstaller", "customtkinter", "selenium", "dotenv", "certifi", "openpyxl"):
         if find_spec(modulo) is None:
             raise SystemExit(
                 "Dependências ausentes. Execute: "
@@ -40,6 +40,8 @@ def main():
             "--hidden-import", "selenium.webdriver.chrome.webdriver",
             "--hidden-import", "selenium.webdriver.chrome.options",
             "--collect-data", "selenium",
+            "--collect-data", "openpyxl",
+            "--noupx",
             str(raiz / "src" / "main.py"),
         ],
         cwd=raiz,

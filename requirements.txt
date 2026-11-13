@@ -3,3 +3,4 @@ certifi
 pytest
 selenium
 customtkinter
+openpyxl

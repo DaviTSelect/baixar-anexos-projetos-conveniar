@@ -2,13 +2,13 @@ import shutil
 import tempfile
 import os
 from selenium import webdriver
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support.select import Select
 from selenium.webdriver.support import expected_conditions as EC
 import time
-from dotenv import load_dotenv
+
 from pathlib import Path
 from config import URL,USUARIO,SENHA,HEADLESS
 from selenium.webdriver.chrome.service import Service
@@ -352,9 +352,13 @@ def processar_contrato(driver, item, projeto, diretorio_destino):
         )).click()
         aguardar_loader_desaparecer(driver)
         tabela_id = "ctl00_ContentPlaceHolder1_ConvenioContratoArquivosUserControl1_gvwArquivoContrato"
-        tabela = WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.ID, tabela_id))
-        )
+        etapa = "localização da tabela de arquivos"
+        try:
+            tabela = WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.ID, tabela_id))
+            )
+        except TimeoutException:
+            return {"baixados": 0, "sem_tabela": True}
         seletor = 'a[title="Baixar arquivo"]'
         quantidade = len(tabela.find_elements(By.CSS_SELECTOR, seletor))
         for indice in range(quantidade):
@@ -392,6 +396,7 @@ def processar_contrato(driver, item, projeto, diretorio_destino):
                 print(f"Movido: {destino}")
             pasta_download.rmdir()
             pasta_download = None
+        return {"baixados": quantidade, "sem_tabela": False}
     except Exception as erro:
         # Não inclui a exceção do navegador, que pode conter dados da sessão.
         print(f"Falha no contrato {contrato}: {etapa}.")

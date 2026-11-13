@@ -15,7 +15,7 @@ if exist "venv\Scripts\python.exe" (
     set PYINST=pyinstaller
 )
 
-for /f "usebackq delims=" %%v in (`%PY% -c "import version; print(version.VERSION)"`) do set VERSION=%%v
+for /f "usebackq delims=" %%v in (`%PY% -c "import sys; sys.path.insert(0,'.'); import version; print(version.VERSION)"`) do set VERSION=%%v
 if "%VERSION%"=="" (
     echo ERRO: nao foi possivel ler VERSION de version.py
     pause & exit /b 1

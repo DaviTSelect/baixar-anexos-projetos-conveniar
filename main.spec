@@ -1,12 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files
+
+datas = (
+    collect_data_files('customtkinter')
+    + collect_data_files('certifi')
+    + collect_data_files('selenium')
+    + collect_data_files('openpyxl')
+    + [('icon/logo.ico', 'icon')]
+)
 
 a = Analysis(
     ['src/main.py'],
-    pathex=[],
-    binaries=[('icon/logo.ico', 'icon')],
-    datas=[],
-    hiddenimports=[],
+    pathex=['src'],
+    binaries=[],
+    datas=datas,
+    hiddenimports=[
+        'selenium.webdriver.chrome.webdriver',
+        'selenium.webdriver.chrome.options',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
