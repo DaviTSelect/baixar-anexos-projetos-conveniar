@@ -121,5 +121,29 @@ class InterfaceTests(unittest.TestCase):
         sucesso.assert_not_called()
 
 
+    def test_relatorio_mencionado_na_mensagem_de_conclusao(self):
+        self.modulo.buscar_contratos.return_value = [{'contrato': '1/2026', 'status': 'Ativo'}]
+        self.modulo.processar_contrato.return_value = {"baixados": 2, "sem_tabela": False}
+        with patch.object(self.modulo, 'gerar_relatorio',
+                          return_value=Path('relatorio_123_20260101_120000.xlsx')):
+            self.ui.executar_automacao(123, self.ui.diretorio)
+        with patch.object(self.modulo.messagebox, 'showinfo') as aviso:
+            self.ui.consumir_eventos()
+        aviso.assert_called_once()
+        self.assertIn('relatorio_123', str(aviso.call_args))
+
+    def test_falha_ao_gerar_relatorio_nao_oculta_downloads_concluidos(self):
+        self.modulo.buscar_contratos.return_value = [{'contrato': '1/2026', 'status': 'Ativo'}]
+        self.modulo.processar_contrato.return_value = {"baixados": 1, "sem_tabela": False}
+        with patch.object(self.modulo, 'gerar_relatorio', side_effect=OSError('disco cheio')):
+            self.ui.executar_automacao(123, self.ui.diretorio)
+        with patch.object(self.modulo.messagebox, 'showinfo') as aviso, \
+                patch.object(self.modulo.messagebox, 'showerror') as erro:
+            self.ui.consumir_eventos()
+        aviso.assert_called_once()
+        erro.assert_not_called()
+        self.assertIn('Falha ao gerar relatório', str(aviso.call_args))
+
+
 if __name__ == '__main__':
     unittest.main()

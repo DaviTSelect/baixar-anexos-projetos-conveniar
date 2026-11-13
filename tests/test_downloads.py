@@ -154,6 +154,21 @@ class DownloadsTests(unittest.TestCase):
         driver.close.assert_called_once()
         driver.switch_to.window.assert_called_with('consulta')
 
+    def test_varios_anexos_retorna_contagem_correta(self):
+        driver, _ = self.preparar_contrato(['a.pdf', 'b.pdf', 'c.pdf'])
+        with patch.object(self.browser, 'aguardar_loader_desaparecer'):
+            resultado = self.browser.processar_contrato(
+                driver, {'contrato': '10/2026', 'link': Mock()}, 328, self.pasta)
+        self.assertEqual(resultado, {"baixados": 3, "sem_tabela": False})
+
+    def test_tabela_sem_botoes_retorna_zero_sem_tabela_falso(self):
+        driver, _ = self.preparar_contrato([])
+        with patch.object(self.browser, 'aguardar_loader_desaparecer'), \
+                patch.object(self.browser, 'aguardar_arquivo_download'):
+            resultado = self.browser.processar_contrato(
+                driver, {'contrato': '10/2026', 'link': Mock()}, 328, self.pasta)
+        self.assertEqual(resultado, {"baixados": 0, "sem_tabela": False})
+
     def test_falha_restaura_janela_e_pasta(self):
         driver, _ = self.preparar_contrato(['a.pdf'], falhar=True)
         with patch.object(self.browser, 'aguardar_loader_desaparecer'):
