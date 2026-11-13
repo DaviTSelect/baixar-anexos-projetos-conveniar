@@ -12,10 +12,11 @@ datas = (
 
 a = Analysis(
     ['src/main.py'],
-    pathex=['src'],
+    pathex=['src', '.'],
     binaries=[],
     datas=datas,
     hiddenimports=[
+        'version',
         'selenium.webdriver.chrome.webdriver',
         'selenium.webdriver.chrome.options',
     ],
