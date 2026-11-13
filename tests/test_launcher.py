@@ -124,7 +124,6 @@ class InicializadorTests(unittest.TestCase):
         self.ui.status.configure.assert_not_called()
         self.ui.app.destroy.assert_called_once()
 
-    @pytest.mark.xfail(strict=True, reason='QA-01: verificar() não impede consultas simultâneas; ver docs/testes.md')
     def test_consultas_simultaneas_devem_ser_impedidas(self):
         with patch.object(launcher, 'Thread') as thread:
             self.ui.verificar()

@@ -102,6 +102,7 @@ class Inicializador:
 
         self.fechando = False
         self.baixando = False
+        self.verificando = False
         self.abrindo_programa = False
 
         # IMPORTANTE:
@@ -181,6 +182,7 @@ class Inicializador:
         if (
             self.fechando
             or self.baixando
+            or self.verificando
             or self.abrindo_programa
         ):
             return
@@ -200,6 +202,8 @@ class Inicializador:
         self.progresso.configure(
             text=""
         )
+
+        self.verificando = True
 
         Thread(
             target=self.executar_verificacao,
@@ -321,6 +325,8 @@ class Inicializador:
                 # =========================================
 
                 if tipo == "verificacao":
+
+                    self.verificando = False
 
                     (
                         texto,

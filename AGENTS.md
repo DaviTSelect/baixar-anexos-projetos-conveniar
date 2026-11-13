@@ -91,7 +91,7 @@ As regras abaixo descrevem o comportamento pretendido. Consulte o guia para dist
 - A espera do loader usa a invisibilidade de `imgLoad` com timeout; o seletor ainda requer validação no Conveniar.
 - A consulta não implementa paginação e limpa apenas a data inicial.
 - `tests/test_regras.py` exercita `buscar_contratos()` com navegador simulado; não depende de `src.contratos`.
-- O inicializador exige consulta bem-sucedida antes de abrir o painel. QA-01 (consultas simultâneas) está documentado em `docs/testes.md` como falha esperada estrita.
+- O inicializador exige consulta bem-sucedida antes de abrir o painel.
 - Testes locais aprovados não comprovam completude dos downloads ou instalação real.
 - O navegador depende dos caminhos de Chrome e ChromeDriver para Windows descritos no README.
 

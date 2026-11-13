@@ -106,7 +106,7 @@ python -B -m pytest -p no:cacheprovider
 
 `test_regras.py` carrega `browser.py` com configuração fictícia e exercita `buscar_contratos()`: situações válidas, espaços nas extremidades, projeto correto, link, linhas incompletas, ordem e resultado vazio. Não depende de um módulo `src.contratos`.
 
-Os testes de atualização usam o retorno atual de três valores: mensagem, status textual e URL. Os testes do inicializador simulam janelas, rede e execução do instalador. QA-01 permanece como `xfail(strict=True)`: a consulta não impede chamadas simultâneas. Uma correção futura fará esse teste sinalizar XPASS até retirar a marcação.
+Os testes de atualização usam o retorno atual de três valores: mensagem, status textual e URL. Os testes do inicializador simulam janelas, rede e execução do instalador.
 
 Os testes de envio usam repositórios e remotos locais temporários, sem publicar no GitHub. Requerem Git; os cenários PowerShell são ignorados se ele estiver ausente.
 
@@ -180,7 +180,7 @@ O fluxo é obrigatório. `src/main.py` chama `Inicializador.iniciar()`, que agen
 
 A comparação usa tuplas numéricas `MAJOR.MINOR.PATCH`, com prefixo `v` opcional. Rascunhos, pré-releases, JSON inválido, falhas HTTP ou de rede e versões novas sem asset `.exe` resultam em erro. A consulta usa timeout de 15 segundos. A versão local é `VERSAO_ATUAL` em `src/update.py`, atualmente `1.1.2`.
 
-Consulta e download usam threads daemon e publicam resultados em uma fila. A thread principal consome os eventos a cada 100 ms e atualiza os widgets. O código impede novos downloads durante um download ativo, mas não impede consultas simultâneas (QA-01).
+Consulta e download usam threads daemon e publicam resultados em uma fila. A thread principal consome os eventos a cada 100 ms e atualiza os widgets. O código impede novos downloads durante um download ativo e impede consultas simultâneas com a flag `verificando`.
 
 O download usa `urlopen` com timeout de 60 segundos, lê blocos de até 1 MiB e salva na pasta temporária do sistema. Remove o arquivo quando uma exceção interrompe a operação e rejeita arquivo vazio. Não verifica hash, assinatura ou igualdade com `Content-Length`. O timeout de rede não é um limite total da atualização.
 

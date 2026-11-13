@@ -31,14 +31,6 @@ python -B -m pytest tests/test_regras.py tests/test_update.py tests/test_launche
 | `test_update_ssl.py` | Preservação das CAs do sistema, acréscimo de certifi e manutenção da validação TLS em consultas e downloads. |
 | `test_envio_github.py` | Envio local simulado, cancelamento, bloqueio de `.env`, ausência de branch e preservação de commit após push rejeitado. |
 
-## Falha esperada: QA-01
-
-`InicializadorTests.test_consultas_simultaneas_devem_ser_impedidas` chama `verificar()` duas vezes antes de receber um resultado. O esperado é iniciar apenas uma consulta; atualmente são iniciadas duas threads.
-
-O teste permanece com `xfail(strict=True)`: registra uma falha conhecida sem tratá-la como comportamento correto. `XFAIL` não equivale a aprovado. Após corrigir o código, ele produzirá `XPASS` e fará a suíte falhar até remover a marcação. A atualização dos testes e documentos não corrige a automação.
-
-Essa reprodução chama o método diretamente; não comprova que todo usuário consegue disparar duas consultas pela interface. Falta uma trava no método para impedir sobreposição.
-
 ## Limitações que não devem ser confundidas com aprovação
 
 - Os testes de tabela ausente e de falha em contrato caracterizam o comportamento atual de interrupção; não aprovam esse comportamento como requisito definitivo.
