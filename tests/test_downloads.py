@@ -137,8 +137,7 @@ class DownloadsTests(unittest.TestCase):
         driver.close.assert_called_once()
         driver.switch_to.window.assert_called_with('consulta')
 
-    def test_tabela_ausente_propaga_falha_e_restaura_navegacao(self):
-        # A ausência completa da tabela ainda não é tratada como contrato sem anexos.
+    def test_tabela_ausente_retorna_sem_tabela_e_restaura_navegacao(self):
         driver, _ = self.preparar_contrato([])
         localizar = driver.find_element.side_effect
 
@@ -149,9 +148,9 @@ class DownloadsTests(unittest.TestCase):
 
         driver.find_element.side_effect = encontrar
         with patch.object(self.browser, 'aguardar_loader_desaparecer'):
-            with self.assertRaisesRegex(RuntimeError, 'abertura da aba Arquivos'):
-                self.browser.processar_contrato(
-                    driver, {'contrato': '10/2026', 'link': Mock()}, 328, self.pasta)
+            resultado = self.browser.processar_contrato(
+                driver, {'contrato': '10/2026', 'link': Mock()}, 328, self.pasta)
+        self.assertEqual(resultado, {"baixados": 0, "sem_tabela": True})
         driver.close.assert_called_once()
         driver.switch_to.window.assert_called_with('consulta')
 

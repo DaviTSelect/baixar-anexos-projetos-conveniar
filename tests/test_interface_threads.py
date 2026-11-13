@@ -96,19 +96,20 @@ class InterfaceTests(unittest.TestCase):
         self.driver.quit.assert_called_once()
         self.assertIn('Nenhum contrato encontrado', str(aviso.call_args))
 
-    def test_falha_em_contrato_interrompe_restantes_e_nao_anuncia_sucesso(self):
-        # Caracteriza a limitação atual: não há continuação automática após erro.
+    def test_falha_em_contrato_nao_interrompe_restantes_e_registra_no_relatorio(self):
+        # Erros individuais são registrados no relatório; os demais contratos continuam.
         self.modulo.buscar_contratos.return_value = [
-            {'contrato': '1/2026'}, {'contrato': '2/2026'}]
+            {'contrato': '1/2026', 'status': 'Ativo'},
+            {'contrato': '2/2026', 'status': 'Ativo'}]
         self.modulo.processar_contrato.side_effect = RuntimeError('falha fictícia')
         self.ui.executar_automacao(123, self.ui.diretorio)
         with patch.object(self.modulo.messagebox, 'showerror') as erro, \
                 patch.object(self.modulo.messagebox, 'showinfo') as sucesso:
             self.ui.consumir_eventos()
-        self.modulo.processar_contrato.assert_called_once()
+        self.assertEqual(self.modulo.processar_contrato.call_count, 2)
         self.driver.quit.assert_called_once()
-        self.assertIn('contrato 1/2026', str(erro.call_args))
-        sucesso.assert_not_called()
+        erro.assert_not_called()
+        sucesso.assert_called_once()
 
     def test_falha_no_quit_nao_anuncia_sucesso(self):
         self.driver.quit.side_effect = RuntimeError('falha')

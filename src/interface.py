@@ -238,7 +238,7 @@ class InterfaceAutomacao:
                     resultados_contratos.append({
                         "projeto": numero_projeto,
                         "contrato": item["contrato"],
-                        "situacao": item["status"],
+                        "situacao": item.get("status", ""),
                         "resultado": resultado_texto,
                         "baixados": r["baixados"],
                         "detalhe": detalhe,
@@ -247,7 +247,7 @@ class InterfaceAutomacao:
                     resultados_contratos.append({
                         "projeto": numero_projeto,
                         "contrato": item["contrato"],
-                        "situacao": item["status"],
+                        "situacao": item.get("status", ""),
                         "resultado": "Erro",
                         "baixados": 0,
                         "detalhe": str(e_contrato),
