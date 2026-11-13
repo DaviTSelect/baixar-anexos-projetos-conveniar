@@ -28,7 +28,7 @@ import openpyxl
 from PySide6.QtCore import QPointF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QGraphicsDropShadowEffect,
+    QApplication, QCheckBox, QFileDialog, QFrame, QGraphicsDropShadowEffect,
     QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
     QVBoxLayout, QWidget,
 )
@@ -167,11 +167,27 @@ class Icon(QWidget):
             pen.setWidthF(2.0)
             p.setPen(pen)
             self._check(p)
+        elif self.kind == 'monitor':
+            self._monitor(p)
         p.end()
 
     @staticmethod
     def _ln(p, x1, y1, x2, y2):
         p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
+    def _monitor(self, p):
+        # Tela
+        path = QPainterPath()
+        path.moveTo(3.5, 5.5)
+        path.lineTo(20.5, 5.5)
+        path.lineTo(20.5, 15.5)
+        path.lineTo(3.5, 15.5)
+        path.closeSubpath()
+        p.drawPath(path)
+        # Suporte
+        self._ln(p, 12.0, 15.5, 12.0, 18.5)
+        # Base
+        self._ln(p, 8.5, 18.5, 15.5, 18.5)
 
     def _pasta(self, p):
         path = QPainterPath()
@@ -393,6 +409,71 @@ class SelectionRow(QFrame):
 
 
 # ──────────────────────────────────────────────────────────────
+# Linha de alternância (checkbox visual)
+# ──────────────────────────────────────────────────────────────
+
+class ToggleRow(QFrame):
+    """Etapa com alternância (ativo/inativo) baseada em QCheckBox."""
+
+    def __init__(self, number, title, description, label, changed_cb, optional=True):
+        super().__init__()
+        self.setObjectName('togRow')
+        self.setStyleSheet('#togRow{background:transparent;border:none;}')
+        self.setMinimumHeight(100)
+
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(12)
+
+        self._icon_holder, ih = _porta_icone(False)
+        ih.addWidget(Icon('monitor'))
+        outer.addWidget(self._icon_holder, 0, Qt.AlignTop)
+
+        content = QVBoxLayout()
+        content.setSpacing(0)
+        content.setContentsMargins(0, 1, 0, 0)
+
+        head = QHBoxLayout()
+        head.setSpacing(9)
+        head.addWidget(_rotulo('ETAPA ' + number, 9, '#7b8791', QFont.Bold))
+        if optional:
+            opt = QLabel('OPCIONAL')
+            opt.setFont(QFont('Segoe UI', 8))
+            opt.setStyleSheet(
+                'color:#8998a3;background:#edf0ee;border-radius:9px;padding:3px 8px;')
+            head.addWidget(opt)
+        head.addStretch()
+        content.addLayout(head)
+        content.addSpacing(5)
+        content.addWidget(_rotulo(title, 12, BG, QFont.DemiBold))
+        content.addSpacing(4)
+        content.addWidget(_rotulo(description, 10, '#6d7780', wrap=True))
+        content.addStretch()
+        outer.addLayout(content, 1)
+
+        self._toggle = QCheckBox(label)
+        self._toggle.setFont(QFont('Segoe UI', 10))
+        self._toggle.setCursor(Qt.PointingHandCursor)
+        self._toggle.setStyleSheet(
+            'QCheckBox{color:#344a5b;spacing:8px;}'
+            'QCheckBox::indicator{width:18px;height:18px;border:2px solid #c0c8cc;'
+            'border-radius:4px;background:#ffffff;}'
+            'QCheckBox::indicator:checked{background:#317458;border-color:#317458;}'
+            'QCheckBox::indicator:hover{border-color:#8ea8b4;}')
+        self._toggle.stateChanged.connect(lambda _s: changed_cb(self._toggle.isChecked()))
+        outer.addWidget(self._toggle, 0, Qt.AlignVCenter)
+
+    def marcado(self) -> bool:
+        return self._toggle.isChecked()
+
+    def configure(self, state=None, **_kw):
+        if state == 'disabled':
+            self._toggle.setEnabled(False)
+        elif state == 'normal':
+            self._toggle.setEnabled(True)
+
+
+# ──────────────────────────────────────────────────────────────
 # Janela principal
 # ──────────────────────────────────────────────────────────────
 
@@ -419,6 +500,7 @@ class InterfaceAutomacao(QWidget):
         # Estado da automação
         self.numero_projeto: int | None = None
         self.diretorio: Path | None = None
+        self.ocultar_chrome = False
         self.executando = False
         self.fechando = False
         self.cancelar = Event()
@@ -576,6 +658,16 @@ class InterfaceAutomacao(QWidget):
             self._escolher_pasta,
         )
         lay.addWidget(self._row_pasta)
+        lay.addWidget(_divisor('#e3e5e2'))
+
+        # Etapa 03 — ocultar janela do Chrome (opcional)
+        self._row_headless = ToggleRow(
+            '03', 'Modo silencioso',
+            'Oculta a janela do Chrome durante a execução.',
+            'Ocultar Chrome',
+            self._ao_mudar_headless,
+        )
+        lay.addWidget(self._row_headless)
 
     def _montar_rodape_cartao(self, lay):
         rodape = QFrame()
@@ -634,6 +726,9 @@ class InterfaceAutomacao(QWidget):
 
     def _ao_mudar_selecoes(self):
         self.atualizar_estado()
+
+    def _ao_mudar_headless(self, marcado: bool):
+        self.ocultar_chrome = marcado
 
     def atualizar_estado(self):
         n = self._row_projeto.valor() if hasattr(self, '_row_projeto') else ''
@@ -700,6 +795,8 @@ class InterfaceAutomacao(QWidget):
         self.campo_N_projeto.configure(state='disabled')
         if hasattr(self, '_row_pasta'):
             self._row_pasta.configure(state='disabled')
+        if hasattr(self, '_row_headless'):
+            self._row_headless.configure(state='disabled')
         if hasattr(self, '_status_titulo'):
             self._status_titulo.setText('Processamento em andamento')
         self.worker = Thread(
@@ -723,7 +820,7 @@ class InterfaceAutomacao(QWidget):
             if self.cancelar.is_set():
                 return
             self.eventos.put(('status', 'Realizando login...'))
-            driver = realizar_login()
+            driver = realizar_login(headless=getattr(self, 'ocultar_chrome', False))
             if self.cancelar.is_set():
                 return
             etapa = 'configuração da pasta de downloads'
@@ -808,6 +905,8 @@ class InterfaceAutomacao(QWidget):
                         self.campo_N_projeto.configure(state='normal')
                         if hasattr(self, '_row_pasta'):
                             self._row_pasta.configure(state='normal')
+                        if hasattr(self, '_row_headless'):
+                            self._row_headless.configure(state='normal')
                         if hasattr(self, '_status_titulo'):
                             self._status_titulo.setText('Concluído' if not erro else 'Falha')
                         self.atualizar_status(erro or texto)

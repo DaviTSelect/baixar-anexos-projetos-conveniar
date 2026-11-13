@@ -31,6 +31,7 @@ class InterfaceTests(unittest.TestCase):
         self.pasta = TemporaryDirectory()
         self.addCleanup(self.pasta.cleanup)
         self.ui.diretorio = Path(self.pasta.name)
+        self.ui.ocultar_chrome = False
         for nome in ('app', 'label_status',
                      'botao_conferir_N_projeto', 'campo_N_projeto'):
             setattr(self.ui, nome, Mock())
@@ -49,7 +50,7 @@ class InterfaceTests(unittest.TestCase):
         try:
             self.assertTrue(entrou.wait(3))
             self.ui.botao_iniciar_processo()
-            self.modulo.realizar_login.assert_called_once_with()
+            self.modulo.realizar_login.assert_called_once_with(headless=False)
             self.ui.label_status.configure.assert_not_called()
             self.ui.app.after.assert_not_called()
             self.assertNotEqual(threads[0], get_ident())

@@ -69,7 +69,8 @@ class DownloadsTests(unittest.TestCase):
         loader.is_displayed.side_effect = lambda: 0.4 <= self.agora < 1.2
         driver.find_elements.return_value = [loader]
         self.browser.aguardar_loader_desaparecer(driver)
-        self.assertGreaterEqual(self.agora, 2.2)
+        # Loader desaparece em 1.2 s; estabilidade = 0.5 s → mínimo ≈ 1.7 s
+        self.assertGreaterEqual(self.agora, 1.65)
 
     def test_loader_visivel_gera_timeout(self):
         driver = Mock()

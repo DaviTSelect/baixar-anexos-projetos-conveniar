@@ -15,17 +15,19 @@ from selenium.webdriver.chrome.service import Service
 
 
 
-def realizar_login(diretorio_destino=None):
-    """Usa as credenciais fixas configuradas no .env via config.py."""
+def realizar_login(diretorio_destino=None, headless=None):
+    """Usa as credenciais fixas configuradas no .env via config.py.
+
+    headless: True/False sobrescreve HEADLESS do .env; None usa o valor do .env.
+    """
+
+    usar_headless = HEADLESS if headless is None else headless
 
     if diretorio_destino is None:
         from config import BASE_DIR
         diretorio_destino = BASE_DIR / "downloads"
 
-    diretorio_destino.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    diretorio_destino.mkdir(parents=True, exist_ok=True)
 
     # ============================================================
     # CONFIGURAÇÃO DO CHROME PORTÁTIL
@@ -33,26 +35,12 @@ def realizar_login(diretorio_destino=None):
 
     user_profile = os.environ["USERPROFILE"]
 
-    chromedriver_path = os.path.join(
-        user_profile,
-        "Chrome",
-        "chromedriver.exe"
-    )
+    chromedriver_path = os.path.join(user_profile, "Chrome", "chromedriver.exe")
+    chrome_path = os.path.join(user_profile, "Chrome", "GoogleChrome", "App",
+                               "Chrome-bin", "chrome.exe")
 
-    chrome_path = os.path.join(
-        user_profile,
-        "Chrome",
-        "GoogleChrome",
-        "App",
-        "Chrome-bin",
-        "chrome.exe"
-    )
-
-    # Verifica se o ChromeDriver existe
     if not os.path.isfile(chromedriver_path):
         raise FileNotFoundError("ChromeDriver não encontrado no caminho configurado.")
-
-    # Verifica se o Chrome existe
     if not os.path.isfile(chrome_path):
         raise FileNotFoundError("Google Chrome não encontrado no caminho configurado.")
 
@@ -61,37 +49,39 @@ def realizar_login(diretorio_destino=None):
     # ============================================================
 
     options = webdriver.ChromeOptions()
-
-    # Usa exatamente o Chrome portátil informado acima
     options.binary_location = chrome_path
 
-    # Configurações de download
-    options.add_experimental_option(
-        "prefs",
-        {
-            "download.default_directory": str(diretorio_destino),
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        }
-    )
+    options.add_experimental_option("prefs", {
+        "download.default_directory": str(diretorio_destino),
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True,
+    })
 
-    # Headless, caso esteja habilitado
-    if HEADLESS:
+    # Flags de desempenho: reduzem inicialização e throttling de abas em background
+    for flag in (
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--disable-sync",
+    ):
+        options.add_argument(flag)
+
+    if usar_headless:
         options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
 
     # ============================================================
     # INICIA O CHROMEDRIVER MANUAL
     # ============================================================
 
-    service = Service(
-        executable_path=chromedriver_path
-    )
-
-    driver = webdriver.Chrome(
-        service=service,
-        options=options
-    )
+    service = Service(executable_path=chromedriver_path)
+    driver = webdriver.Chrome(service=service, options=options)
 
     # ============================================================
     # LOGIN
@@ -99,56 +89,26 @@ def realizar_login(diretorio_destino=None):
 
     try:
         wait = WebDriverWait(driver, 30)
-
         driver.get(URL)
 
-        usuario_login = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.ID,
-                    "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_UserName"
-                )
-            )
-        )
+        wait.until(EC.element_to_be_clickable((
+            By.ID,
+            "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_UserName",
+        ))).send_keys(USUARIO)
 
-        usuario_login.send_keys(USUARIO)
-        aguardar_loader_desaparecer(driver)
-        print("Usuario inserido!")
+        wait.until(EC.element_to_be_clickable((
+            By.ID,
+            "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_Password",
+        ))).send_keys(SENHA)
 
-        senha_login = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.ID,
-                    "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_Password"
-                )
-            )
-        )
-
-        senha_login.send_keys(SENHA)
-        aguardar_loader_desaparecer(driver)
-        print("Senha inserida!")
-
-        entrar_login = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.ID,
-                    "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_btnLogin"
-                )
-            )
-        )
-
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center'});",
-            entrar_login
-        )
-
-        driver.execute_script(
-            "arguments[0].click();",
-            entrar_login
-        )
+        entrar_login = wait.until(EC.element_to_be_clickable((
+            By.ID,
+            "ctl00_ContentPlaceHolder1_ObjWucLoginCaptcha_lgUsuario_btnLogin",
+        )))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", entrar_login)
+        driver.execute_script("arguments[0].click();", entrar_login)
 
         aguardar_loader_desaparecer(driver)
-
         print("Logado com sucesso!")
         print("-" * 50)
 
@@ -195,7 +155,7 @@ def carregar_linhas_contratos(driver, timeout=30):
         if assinatura != assinatura_anterior:
             assinatura_anterior = assinatura
             estavel_desde = agora
-        if agora - estavel_desde >= 2:
+        if agora - estavel_desde >= 1:
             # A tupla permite retornar também uma tabela vazia estabilizada.
             return (linhas,)
         return False
@@ -384,9 +344,7 @@ def processar_contrato(driver, item, projeto, diretorio_destino):
             })
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", botao)
             botao.click()
-            aguardar_loader_desaparecer(driver)
             arquivo = aguardar_arquivo_download(pasta_download)
-            aguardar_loader_desaparecer(driver)
             destino = pasta_destino / arquivo.name
             if destino.exists():
                 print(f"Arquivo já existe: {destino.name}")
@@ -434,8 +392,8 @@ def aguardar_loader_desaparecer(driver, timeout=30):
         agora = time.monotonic()
         if livre_desde is None:
             livre_desde = agora
-        return agora - livre_desde >= 1
+        return agora - livre_desde >= 0.5
 
-    WebDriverWait(driver, timeout, poll_frequency=0.2).until(
+    WebDriverWait(driver, timeout, poll_frequency=0.15).until(
         pagina_livre, message="A página não terminou de carregar ou o loader continua visível.",
     )

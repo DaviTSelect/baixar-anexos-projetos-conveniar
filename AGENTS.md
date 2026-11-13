@@ -23,7 +23,7 @@ Estas instruções se aplicam a todo o repositório. Antes de trabalhar, leia es
 ## Autenticação e configuração
 
 - O login usa `USUARIO` e `SENHA` configurados no `.env`, carregados por `src/config.py`.
-- A interface deve chamar `realizar_login()` sem argumentos.
+- A interface deve chamar `realizar_login()` passando apenas o parâmetro `headless` que reflete o estado do checkbox da janela (ex.: `realizar_login(headless=self.ocultar_chrome)`). Outros argumentos de credenciais são proibidos.
 - Não implemente login local, armazenamento de credenciais em JSON, opção de lembrar senha ou campos de usuário e senha no painel, salvo nova solicitação explícita.
 - Não coloque credenciais diretamente no código, na documentação, em testes, logs ou mensagens de erro.
 - Não versione `.env` ou arquivos com credenciais. Use somente valores fictícios no `.env.example` e nos testes.

@@ -57,9 +57,11 @@ class CarregamentoTests(unittest.TestCase):
 
     def test_rebusca_inclui_linha_tardia_e_preserva_primeira(self):
         completas = [self.primeira, self.segunda]
-        resultado = self.executar([[self.primeira]] * 3 + [completas] * 5)
+        # Estabilidade 1 s, poll 0.5 s: 2 leituras de [primeira] (0 s e 0.5 s) não
+        # atingem 1 s; na 3ª poll (1.0 s) a assinatura muda → mais 2 polls para estabilizar.
+        resultado = self.executar([[self.primeira]] * 2 + [completas] * 3)
         self.assertEqual(resultado, completas)
-        self.assertEqual(self.driver.find_elements.call_count, 8)
+        self.assertEqual(self.driver.find_elements.call_count, 5)
 
     def test_tabela_vazia_estavel(self):
         self.assertEqual(self.executar([[]] * 5), [])
