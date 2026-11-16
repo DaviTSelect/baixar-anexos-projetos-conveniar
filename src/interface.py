@@ -498,7 +498,9 @@ class InterfaceAutomacao(QWidget):
         base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent))
         icon_path = base / 'icon' / 'logo.ico'
         if icon_path.is_file():
-            self.setWindowIcon(QIcon(str(icon_path)))
+            _icon = QIcon(str(icon_path))
+            QApplication.instance().setWindowIcon(_icon)
+            self.setWindowIcon(_icon)
 
         # Estado da automação
         self.numero_projeto: int | None = None

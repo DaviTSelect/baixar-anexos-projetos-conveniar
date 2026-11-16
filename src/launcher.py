@@ -1,3 +1,4 @@
+from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 
@@ -36,6 +37,14 @@ class Inicializador:
         self.app.geometry("420x220")
         self.app.resizable(False, False)
         self.app.configure(bg="#203447")
+
+        _base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent))
+        _ico = _base / 'icon' / 'logo.ico'
+        if _ico.is_file():
+            try:
+                self.app.iconbitmap(str(_ico))
+            except Exception:
+                pass
 
         # -------------------------------------------------
         # STATUS
